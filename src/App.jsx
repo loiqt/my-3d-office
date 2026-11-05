@@ -21,20 +21,20 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Initialization ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'virtual-workplace-3d';
-let db = null;
-let auth = null;
+const firebaseConfig = {
+  apiKey: "AIzaSyBzBLcsQIg8reDq6tpvs9FnLgSaxicOfY0",
+  authDomain: "my-3d-office-game.firebaseapp.com",
+  projectId: "my-3d-office-game",
+  storageBucket: "my-3d-office-game.firebasestorage.app",
+  messagingSenderId: "723982123363",
+  appId: "1:723982123363:web:6c27264a5d926b08f29356",
+  measurementId: "G-88L91QZNH2"
+};
 
-try {
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    const firebaseConfig = JSON.parse(__firebase_config);
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  }
-} catch (e) {
-  console.warn("Firebase initialization skipped or failed.", e);
-}
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'virtual-workplace-3d';
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 // --- Web Audio Synthesizer ---
 class WorkplaceSoundSystem {
@@ -175,20 +175,7 @@ const sfx = new WorkplaceSoundSystem();
 // Initial 15 Teammates & Workstations
 const INITIAL_TEAMMATES = [
   { id: 1, name: "Bạn (Player)", gender: "male", hairStyle: "short", role: "Product Creator", isUser: true, status: "Tự do đi dạo 🚶‍♂️", emotion: "✨", color: "#3B82F6", hairColor: "#1E293B", skinColor: "#fde047" },
-  { id: 2, name: "Sarah Chen", gender: "female", hairStyle: "long", role: "Lead UI/UX Designer", isUser: false, status: "Vẽ Figma Icon 🎨", emotion: "💡", color: "#EC4899", hairColor: "#BE185D", skinColor: "#fde047" },
-  { id: 3, name: "Alex Rivers", gender: "male", hairStyle: "spiky", role: "Fullstack Engineer", isUser: false, status: "Fix bug 3D 🐛", emotion: "💻", color: "#10B981", hairColor: "#047857", skinColor: "#fde047" },
-  { id: 4, name: "Elena Rostova", gender: "female", hairStyle: "ponytail", role: "Product Manager", isUser: false, status: "Họp Sprint 📊", emotion: "☕", color: "#8B5CF6", hairColor: "#4C1D95", skinColor: "#fde047" },
-  { id: 5, name: "Marcus Vance", gender: "male", hairStyle: "short", role: "Tech Lead", isUser: false, status: "Review PR 🔍", emotion: "⚡", color: "#F59E0B", hairColor: "#78350F", skinColor: "#fde047" },
-  { id: 6, name: "Chloe Dubois", gender: "female", hairStyle: "bob", role: "UX Researcher", isUser: false, status: "Phỏng vấn user 🎧", emotion: "😃", color: "#06B6D4", hairColor: "#155E75", skinColor: "#fde047" },
-  { id: 7, name: "Kenji Sato", gender: "male", hairStyle: "spiky", role: "Backend Architect", isUser: false, status: "Tối ưu SQL ⚡", emotion: "🔥", color: "#EF4444", hairColor: "#991B1B", skinColor: "#fde047" },
-  { id: 8, name: "Maya Lin", gender: "female", hairStyle: "long", role: "Marketing Lead", isUser: false, status: "Chiến dịch Ads 🚀", emotion: "🎉", color: "#D97706", hairColor: "#92400E", skinColor: "#fde047" },
-  { id: 9, name: "David Miller", gender: "male", hairStyle: "short", role: "QA Engineer", isUser: false, status: "Chạy Cypress test 🧪", emotion: "🔍", color: "#6366F1", hairColor: "#312E81", skinColor: "#fde047" },
-  { id: 10, name: "Sophia Taylor", gender: "female", hairStyle: "ponytail", role: "HR Specialist", isUser: false, status: "Onboarding mới 🤝", emotion: "💖", color: "#F43F5E", hairColor: "#881337", skinColor: "#fde047" },
-  { id: 11, name: "Liam O'Connor", gender: "nonbinary", hairStyle: "afro", role: "DevOps Lead", isUser: false, status: "K8s Deploy ☁️", emotion: "🚀", color: "#14B8A6", hairColor: "#115E59", skinColor: "#fde047" },
-  { id: 12, name: "Zoe Patel", gender: "female", hairStyle: "bob", role: "Data Scientist", isUser: false, status: "Train AI Model 🤖", emotion: "📊", color: "#A855F7", hairColor: "#581C87", skinColor: "#fde047" },
-  { id: 13, name: "Noah Kim", gender: "male", hairStyle: "spiky", role: "Frontend Dev", isUser: false, status: "Three.js React 🪄", emotion: "⚡", color: "#3B82F6", hairColor: "#1E3A8A", skinColor: "#fde047" },
-  { id: 14, name: "Emma Watson", gender: "female", hairStyle: "long", role: "Content Creator", isUser: false, status: "Viết Blog Tech ✍️", emotion: "☕", color: "#EAB308", hairColor: "#713F12", skinColor: "#fde047" },
-  { id: 15, name: "Oliver Green", gender: "nonbinary", hairStyle: "beanie", role: "Junior Intern", isUser: false, status: "Học React 📚", emotion: "🌱", color: "#84CC16", hairColor: "#365314", skinColor: "#fde047" }
+  { id: 2, name: "Sarah Chen", gender: "female", hairStyle: "long", role: "Lead UI/UX Designer", isUser: false, status: "Vẽ Figma Icon 🎨", emotion: "💡", color: "#EC4899", hairColor: "#BE185D", skinColor: "#fde047" }
 ];
 
 // Item Catalog for Decorator
