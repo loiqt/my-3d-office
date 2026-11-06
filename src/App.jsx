@@ -73,7 +73,6 @@ class WorkplaceSoundSystem {
 }
 const sfx = new WorkplaceSoundSystem();
 
-// --- Item Decor Inventory ---
 const DECOR_INVENTORY = {
   tech: [
     { type: 'laptop', name: 'Laptop Gaming', icon: '💻', color: '#1e293b' },
@@ -120,7 +119,6 @@ const INITIAL_TEAMMATES = Array.from({ length: 15 }, (_, i) => ({
   color: ["#3B82F6", "#EC4899", "#10B981", "#8B5CF6", "#F59E0B", "#06B6D4", "#EF4444"][i % 7],
 }));
 
-// Tạo Texture Bong Bóng Chat 3D
 function createSpeechBubbleTexture(text, senderName) {
   const THREE = window.THREE;
   const canvas = document.createElement('canvas');
@@ -152,7 +150,6 @@ function createSpeechBubbleTexture(text, senderName) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// Xây dựng Object 3D Trang trí Bàn (Không tạo đổ bóng)
 function createItemMesh(item) {
   const THREE = window.THREE;
   const group = new THREE.Group();
@@ -209,12 +206,7 @@ export default function App() {
   const [isLayoutMode, setIsLayoutMode] = useState(false);
   const [activeTargetTeammate, setActiveTargetTeammate] = useState(null);
   const [activeRightTab, setActiveRightTab] = useState('chat');
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [uiToast, setUiToast] = useState(null);
-
-  // Quản lý hiệu ứng chọc ghẹo hoạt ảnh đặc biệt
-  const [duckEffectActive, setDuckEffectActive] = useState(false); // Vịt xoay 3 giây
-  const [faintEffectActive, setFaintEffectActive] = useState(false); // Té xỉu 3 giây
 
   const [deskLayoutPositions, setDeskLayoutPositions] = useState(() => {
     const pos = {}; for (let i = 1; i <= 15; i++) pos[i] = getDefaultDesk3DPosition(i); return pos;
@@ -232,7 +224,7 @@ export default function App() {
   const desk3DMeshMapRef = useRef({});
   const deskItemGroupsRef = useRef({});
   const activeBubblesRef = useRef({});
-  const playerGroupRef = useRef(null); // Tham chiếu đến group nhân vật chính để làm hoạt ảnh té xỉu / vịt xoay
+  const playerGroupRef = useRef(null);
   const cameraTargetFocusRef = useRef(null);
 
   const deskLayoutPositionsRef = useRef(deskLayoutPositions); deskLayoutPositionsRef.current = deskLayoutPositions;
@@ -265,7 +257,7 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Firebase Realtime Sync
+  // Firebase Sync: Bàn, Chat, Người chơi & Nhận hiệu ứng chọc ghẹo thời gian thực
   useEffect(() => {
     if (!db || !user) return;
 
@@ -312,6 +304,10 @@ export default function App() {
       const active = [];
       snapshot.forEach((docSnap) => {
         const p = docSnap.data();
+        // Kiểm tra xem có hiệu ứng chọc ghẹo gửi đến bản thân hay không
+        if (p.uid === user.uid && p.actionEffect && (now - (p.actionTime?.seconds || 0) < 4)) {
+          triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
+        }
         if (p.uid && p.uid !== user.uid && (now - (p.lastSeen?.seconds || now) < 15)) active.push(p);
       });
       setOnlinePlayers(active);
@@ -319,6 +315,56 @@ export default function App() {
 
     return () => { unsubDesks(); unsubChat(); unsubPlayers(); };
   }, [user]);
+
+  // Thực thi hiệu ứng trực tiếp trên nhân vật của bạn khi nhận được lệnh
+  const triggerLocalEffect = (effectType, actorName) => {
+    if (effectType === 'duck') {
+      sfx.play('throw');
+      showToast('Bị Ném Giấy!', `${actorName} vừa chọi giấy vào bạn! Vịt xoay 3 giây 🦆`, 'amber');
+      if (playerGroupRef.current) {
+        const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
+        if (duckSprite) duckSprite.visible = true;
+      }
+      setTimeout(() => {
+        if (playerGroupRef.current) {
+          const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
+          if (duckSprite) duckSprite.visible = false;
+        }
+      }, 3000);
+    } else if (effectType === 'faint') {
+      sfx.play('trip');
+      showToast('Bị Ngáng Chân!', `${actorName} đã gạt chân làm bạn té xỉu dưới sàn 3 giây! 💫`, 'rose');
+      if (playerGroupRef.current) {
+        playerGroupRef.current.rotation.z = Math.PI / 2;
+        playerGroupRef.current.position.y = -0.4;
+      }
+      setTimeout(() => {
+        if (playerGroupRef.current) {
+          playerGroupRef.current.rotation.z = 0;
+          playerGroupRef.current.position.y = 0;
+        }
+      }, 3000);
+    }
+  };
+
+  // Gửi hiệu ứng chọc ghẹo đến người chơi khác qua Firebase
+  const sendActionToPlayer = async (targetPlayer, effectType) => {
+    if (!db || !targetPlayer.uid) return;
+    try {
+      const targetDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', targetPlayer.uid);
+      await setDoc(targetDoc, {
+        actionEffect: effectType,
+        actorName: characterConfig.name,
+        actionTime: serverTimestamp()
+      }, { merge: true });
+
+      if (effectType === 'duck') {
+        showToast('Đã Ném Giấy!', `Bạn đã ném cục giấy trúng ${targetPlayer.name} 📄`, 'amber');
+      } else {
+        showToast('Đã Gạt Chân!', `Bạn đã làm ${targetPlayer.name} té xỉu 💫`, 'rose');
+      }
+    } catch (e) {}
+  };
 
   const teammates = useMemo(() => {
     const list = [...INITIAL_TEAMMATES];
@@ -338,7 +384,7 @@ export default function App() {
   const teammatesRef = useRef(teammates); teammatesRef.current = teammates;
   const onlinePlayersRef = useRef(onlinePlayers); onlinePlayersRef.current = onlinePlayers;
 
-  // 3D Engine Setup (Loại bỏ toàn bộ đổ bóng để tối ưu hiệu năng mượt mà tuyệt đối)
+  // 3D Engine Setup
   useEffect(() => {
     if (!threeLoaded || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -395,7 +441,6 @@ export default function App() {
       const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.48, 0.24), mat); torso.position.y = 0.72; group.add(torso);
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfde047 })); head.position.y = 1.1; group.add(head);
       
-      // Sprite Vịt xoay trên đầu khi bị ném giấy
       const duckCanvas = document.createElement('canvas'); duckCanvas.width = 128; duckCanvas.height = 128;
       const dCtx = duckCanvas.getContext('2d'); dCtx.font = '80px sans-serif'; dCtx.fillText('🦆', 24, 96);
       const duckSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(duckCanvas), transparent: true }));
@@ -408,7 +453,6 @@ export default function App() {
       return group;
     }
 
-    // Build Bàn
     teammatesRef.current.forEach((tm) => {
       const pos = deskLayoutPositionsRef.current[tm.id] || getDefaultDesk3DPosition(tm.id);
       const deskGroup = new THREE.Group();
@@ -463,7 +507,8 @@ export default function App() {
             if (obj.userData?.isAvatarObject) {
               const targetId = obj.userData.teammateId;
               const found = teammatesRef.current.find((t) => t.id === targetId || t.uid === targetId);
-              if (found && !found.isUser) {
+              // Nếu KHÔNG phải chế độ sắp xếp bàn, click vào avatar người khác sẽ mở bảng tương tác chọc ghẹo
+              if (found && !found.isUser && !isLayoutModeRef.current) {
                 setActiveTargetTeammate(found); sfx.play('click'); return;
               }
             }
@@ -471,15 +516,19 @@ export default function App() {
             obj = obj.parent;
           }
 
+          // CHẾ ĐỘ SẮP XẾP BÀN: Kéo thả bàn mượt mà
           if (isLayoutModeRef.current && clickedDeskId) {
             isDraggingEntireDesk = true; activeDraggedDeskId = clickedDeskId; sfx.play('drag'); return;
           }
-          if (clickedDeskId) {
+
+          // CHẾ ĐỘ THƯỜNG: Click chọn bàn để trang trí & phóng to camera
+          if (clickedDeskId && !isLayoutModeRef.current) {
             setSelectedDeskId(clickedDeskId);
             cameraTargetFocusRef.current = clickedDeskId;
             sfx.play('click');
             return;
           }
+
           if (intersects[i].object.userData?.isFloorPlane && !isLayoutModeRef.current) {
             playerPosRef.current.targetX = intersects[i].point.x; playerPosRef.current.targetZ = intersects[i].point.z;
             cameraTargetFocusRef.current = null;
@@ -537,7 +586,6 @@ export default function App() {
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
 
-      // Cập nhật trang trí bàn
       const currentConfigsStr = JSON.stringify(deskConfigsRef.current);
       if (lastConfigsStr !== currentConfigsStr) {
         lastConfigsStr = currentConfigsStr;
@@ -549,7 +597,6 @@ export default function App() {
         });
       }
 
-      // Di chuyển nhân vật
       const curr = playerPosRef.current;
       curr.x += (curr.targetX - curr.x) * 0.12; curr.z += (curr.targetZ - curr.z) * 0.12;
       playerGroup.position.set(curr.x, 0, curr.z);
@@ -599,46 +646,6 @@ export default function App() {
     };
   }, [threeLoaded]);
 
-  // Kích hoạt hiệu ứng Ném giấy (Vịt xoay 3 giây trên đầu)
-  const triggerDuckEffect = () => {
-    setDuckEffectActive(true);
-    sfx.play('throw');
-    showToast('Bị Ném Giấy!', 'Bạn bị chọi giấy choáng váng, vịt xoay trên đầu 3 giây! 🦆', 'amber');
-    
-    if (playerGroupRef.current) {
-      const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
-      if (duckSprite) duckSprite.visible = true;
-    }
-
-    setTimeout(() => {
-      setDuckEffectActive(false);
-      if (playerGroupRef.current) {
-        const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
-        if (duckSprite) duckSprite.visible = false;
-      }
-    }, 3000);
-  };
-
-  // Kích hoạt hiệu ứng Gạt chân (Té xỉu nằm ngửa 3 giây)
-  const triggerFaintEffect = () => {
-    setFaintEffectActive(true);
-    sfx.play('trip');
-    showToast('Bị Ngáng Chân!', 'Bạn bị gạt chân và té xỉu dưới sàn 3 giây! 💫', 'rose');
-
-    if (playerGroupRef.current) {
-      playerGroupRef.current.rotation.z = Math.PI / 2; // Ngả ngang người ngã xuống sàn
-      playerGroupRef.current.position.y = -0.4;
-    }
-
-    setTimeout(() => {
-      setFaintEffectActive(false);
-      if (playerGroupRef.current) {
-        playerGroupRef.current.rotation.z = 0; // Đứng dậy bình thường
-        playerGroupRef.current.position.y = 0;
-      }
-    }, 3000);
-  };
-
   const handleSendMessage = (e) => {
     e.preventDefault(); if (!inputMessage.trim()) return;
     const currentSec = Date.now() / 1000;
@@ -650,7 +657,6 @@ export default function App() {
   return (
     <div className="absolute inset-0 w-full h-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
       
-      {/* Toast thông báo hoạt ảnh */}
       {uiToast && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
           <div className={`px-5 py-3 rounded-2xl shadow-2xl border-2 bg-slate-900 text-white flex items-center gap-3 border-${uiToast.colorClass}-500 shadow-${uiToast.colorClass}-500/20`}>
@@ -670,8 +676,8 @@ export default function App() {
           <div><h1 className="font-bold text-amber-400 font-serif text-base tracking-wide">🏛️ {officeName}</h1></div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setIsLayoutMode(!isLayoutMode)} className={`px-3.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${isLayoutMode ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
-            <Move className="w-3.5 h-3.5" /> {isLayoutMode ? 'Đang Sắp Xếp Bàn' : '🛠️ Sắp Xếp Bàn'}
+          <button onClick={() => { setIsLayoutMode(!isLayoutMode); cameraTargetFocusRef.current = null; }} className={`px-3.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${isLayoutMode ? 'bg-amber-600 border-amber-400 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+            <Move className="w-3.5 h-3.5" /> {isLayoutMode ? 'Đang Sắp Xếp Bàn (Tắt để Trang Trí)' : '🛠️ Sắp Xếp Bàn'}
           </button>
           <button className="px-3.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-white flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: characterConfig.color }} />
@@ -686,7 +692,7 @@ export default function App() {
           <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing relative" />
           
           <div className="absolute top-4 left-6 bg-slate-900/85 backdrop-blur border border-slate-800 px-4 py-2 rounded-2xl text-[11px] text-slate-300 shadow-xl flex items-center gap-2">
-            <ZoomIn className="w-4 h-4 text-blue-400" /> Click chọn bàn để phóng to góc nhìn trang trí chi tiết
+            <ZoomIn className="w-4 h-4 text-blue-400" /> {isLayoutMode ? 'Đang bật chế độ kéo thả bàn tự do' : 'Click chọn bàn để phóng to trang trí • Click người khác để chọc ghẹo'}
           </div>
         </div>
 
@@ -781,23 +787,30 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action Popup Modal khi chọn Nhân vật khác */}
+      {/* Action Popup Modal khi chọn Người chơi khác (Chọc ghẹo đối phương) */}
       {activeTargetTeammate && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-white text-base">Tương tác với {activeTargetTeammate.name}</h3>
+              <h3 className="font-bold text-white text-base">Chọc ghẹo: {activeTargetTeammate.name}</h3>
               <button onClick={() => setActiveTargetTeammate(null)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
+            <p className="text-xs text-slate-400">Gửi hiệu ứng này đến màn hình của {activeTargetTeammate.name}:</p>
             <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
               <button
-                onClick={() => { triggerDuckEffect(); setActiveTargetTeammate(null); }}
+                onClick={() => {
+                  sendActionToPlayer(activeTargetTeammate, 'duck');
+                  setActiveTargetTeammate(null);
+                }}
                 className="p-3.5 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition flex flex-col items-center gap-1.5"
               >
                 <span className="text-xl">📄</span> Ném Cục Giấy (Vịt Xoay 3s)
               </button>
               <button
-                onClick={() => { triggerFaintEffect(); setActiveTargetTeammate(null); }}
+                onClick={() => {
+                  sendActionToPlayer(activeTargetTeammate, 'faint');
+                  setActiveTargetTeammate(null);
+                }}
                 className="p-3.5 rounded-2xl bg-slate-800 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500 text-rose-400 transition flex flex-col items-center gap-1.5"
               >
                 <span className="text-xl">💫</span> Gạt Chân (Ngã Xỉu 3s)
