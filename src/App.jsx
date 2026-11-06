@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { Sparkles, MessageSquare, Send, BellRing, X } from 'lucide-react';
+import { Sparkles, MessageSquare, Send, X, Users, RotateCcw } from 'lucide-react';
 
 // --- Firebase Initialization ---
 const firebaseConfig = {
@@ -15,7 +15,7 @@ const firebaseConfig = {
   measurementId: "G-88L91QZNH2"
 };
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'cherry-blossom-park-3d-v2';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'cherry-blossom-park-3d-v4';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -45,24 +45,16 @@ export default function App() {
   const [customName, setCustomName] = useState('Người Chơi');
 
   const [chatInput, setChatInput] = useState('');
-  const [speechBubbles, setSpeechBubbles] = useState([]);
   const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [targetPlayer, setTargetPlayer] = useState(null);
-  const [uiToast, setUiToast] = useState(null);
-
-  const [myEffect, setMyEffect] = useState(null);
   const [isSitting, setIsSitting] = useState(false);
 
   const canvasContainerRef = useRef(null);
-  const playerPosRef = useRef({ x: (Math.random() - 0.5) * 4, z: (Math.random() - 0.5) * 4, targetX: 0, targetZ: 0 });
+  const playerPosRef = useRef({ x: 0, z: 0, targetX: 0, targetZ: 0 });
   const remoteGroupsRef = useRef({});
-  const screenPositionsRef = useRef({});
+  const activeEffectsRef = useRef({});
+  const chatBubblesRef = useRef({});
   const [threeLoaded, setThreeLoaded] = useState(false);
-
-  const showToast = (title, desc) => {
-    setUiToast({ title, desc });
-    setTimeout(() => setUiToast(null), 3500);
-  };
 
   useEffect(() => {
     if (window.THREE) {
@@ -85,13 +77,11 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Đồng bộ Firebase Realtime: Vị trí người chơi, chat và hiệu ứng chọc ghẹo
   useEffect(() => {
     if (!db || !user || !hasEnteredGame) return;
 
     const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
     
-    // Gửi heartbeat vị trí của bản thân liên tục
     const heartbeat = setInterval(() => {
       if (user && playerPosRef.current) {
         try {
@@ -104,22 +94,19 @@ export default function App() {
             x: playerPosRef.current.x,
             z: playerPosRef.current.z,
             isSitting: isSitting,
+            activeEffect: activeEffectsRef.current[user.uid] || null,
             lastSeen: serverTimestamp()
           }, { merge: true });
         } catch (e) {}
       }
-    }, 800);
+    }, 500);
 
     const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
       const now = Date.now() / 1000;
       const active = [];
       snapshot.forEach((docSnap) => {
         const p = docSnap.data();
-        if (p.uid === user.uid) {
-          if (p.actionEffect && p.actionTime && (now - (p.actionTime?.seconds || 0) < 6)) {
-            triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
-          }
-        } else if (p.uid && (now - (p.lastSeen?.seconds || now) < 20)) {
+        if (p.uid !== user.uid && p.uid && (now - (p.lastSeen?.seconds || now) < 20)) {
           active.push(p);
         }
       });
@@ -132,10 +119,10 @@ export default function App() {
         if (change.type === 'added') {
           const msg = change.data();
           if (msg && msg.text) {
-            setSpeechBubbles((prev) => [
-              ...prev,
-              { id: `b-${Date.now()}-${Math.random()}`, senderName: msg.senderName, text: msg.text, uid: msg.uid, timestamp: Date.now() }
-            ]);
+            chatBubblesRef.current[msg.uid] = {
+              text: `${msg.senderName}: ${msg.text}`,
+              expireAt: Date.now() + 5000
+            };
           }
         }
       });
@@ -148,43 +135,18 @@ export default function App() {
     };
   }, [user, hasEnteredGame, customName, selectedChar, isSitting]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      setSpeechBubbles((prev) => prev.filter((b) => now - b.timestamp < 5000));
-    }, 500);
-    return () => clearInterval(timer);
-  }, []);
-
-  const triggerLocalEffect = (effectType, actorName) => {
-    setMyEffect(effectType);
-    if (effectType === 'duck') {
-      showToast('Bị Ném Giấy!', `${actorName} ném cục giấy trúng bạn! Vịt xoay 3 giây 🦆`);
-    } else if (effectType === 'faint') {
-      showToast('Bị Gạt Chân!', `${actorName} gạt chân làm bạn té nằm ngang 3 giây! 💤`);
-    } else if (effectType === 'flower') {
-      showToast('Nhận Được Hoa!', `${actorName} tặng bạn đóa hoa hồng thắm! 🌸`);
-    } else if (effectType === 'candy') {
-      showToast('Nhận Được Kẹo!', `${actorName} tặng bạn viên kẹo ngọt! 🍬`);
-    }
-    setTimeout(() => setMyEffect(null), 3500);
-  };
-
-  const sendActionToPlayer = async (targetUid, type, label) => {
+  const sendActionToPlayer = async (targetUid, effectType) => {
     if (!db || !targetUid) return;
     setTargetPlayer(null);
-    showToast('Đã Gửi Tương Tác!', `Bạn đã ${label} thành công!`);
 
+    const expireTime = Date.now() + 3000;
     try {
       await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', targetUid), {
-        actionEffect: type,
-        actorName: customName,
-        actionTime: serverTimestamp()
+        activeEffect: { type: effectType, expireAt: expireTime }
       }, { merge: true });
     } catch (e) {}
   };
 
-  // --- 3D Scene Setup ---
   useEffect(() => {
     if (!threeLoaded || !hasEnteredGame || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -209,7 +171,6 @@ export default function App() {
     sunLight.position.set(15, 25, 15);
     scene.add(sunLight);
 
-    // Sân cỏ công viên
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
       new THREE.MeshBasicMaterial({ color: 0x065f46 })
@@ -218,7 +179,6 @@ export default function App() {
     ground.userData = { isFloor: true };
     scene.add(ground);
 
-    // Cây hoa anh đào tâm điểm
     const centerObj = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.CylinderGeometry(1.8, 2.2, 0.4, 16),
@@ -245,7 +205,6 @@ export default function App() {
     }
     scene.add(centerObj);
 
-    // Ghế đá công viên hỗ trợ ngồi
     const createBench = (x, z, rotY) => {
       const bench = new THREE.Group();
       bench.position.set(x, 0, z);
@@ -273,7 +232,6 @@ export default function App() {
     createBench(-6, 5, 1.2);
     createBench(6, -5, -0.5);
 
-    // Mô hình nhân vật 3D chi tiết có tay chân
     const createDetailedHumanMesh = (colorHex, hairHex) => {
       const grp = new THREE.Group();
       const col = parseInt(colorHex.replace('#', '0x'));
@@ -370,13 +328,30 @@ export default function App() {
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
 
     let animId;
+    let clock = 0;
     const animate = () => {
       animId = requestAnimationFrame(animate);
+      clock += 0.05;
 
       const curr = playerPosRef.current;
       curr.x += (curr.targetX - curr.x) * 0.12;
       curr.z += (curr.targetZ - curr.z) * 0.12;
-      playerGroup.position.set(curr.x, isSitting ? 0.25 : 0, curr.z);
+      
+      const myEff = activeEffectsRef.current[user?.uid];
+      const now = Date.now();
+      if (myEff && now < myEff.expireAt) {
+        if (myEff.type === 'faint') {
+          playerGroup.rotation.z = Math.PI / 2;
+          playerGroup.position.set(curr.x, 0.1, curr.z);
+        } else if (myEff.type === 'duck') {
+          playerGroup.rotation.z = 0;
+          playerGroup.rotation.y += 0.2;
+          playerGroup.position.set(curr.x, 0, curr.z);
+        }
+      } else {
+        playerGroup.rotation.z = 0;
+        playerGroup.position.set(curr.x, isSitting ? 0.25 : 0, curr.z);
+      }
 
       const remoteMap = remoteGroupsRef.current;
       const activeUids = new Set(onlinePlayers.map((p) => p.uid));
@@ -389,28 +364,26 @@ export default function App() {
       });
 
       onlinePlayers.forEach((p) => {
-        let rMesh = remoteMap[p.uid];
-        if (!rMesh) {
-          rMesh = createDetailedHumanMesh(p.color || '#3b82f6', p.hairColor || '#1e293b');
-          scene.add(rMesh);
-          remoteMap[p.uid] = rMesh;
+        let rData = remoteMap[p.uid];
+        if (!rData) {
+          const mesh = createDetailedHumanMesh(p.color || '#3b82f6', p.hairColor || '#1e293b');
+          scene.add(mesh);
+          rData = { mesh };
+          remoteMap[p.uid] = rData;
         }
-        rMesh.position.set(p.x || 0, p.isSitting ? 0.25 : 0, p.z || 0);
-      });
 
-      const newScreenPos = {};
-      const allPeople = [{ uid: user?.uid, name: customName, x: curr.x, z: curr.z }, ...onlinePlayers];
+        rData.mesh.position.set(p.x || 0, p.isSitting ? 0.25 : 0, p.z || 0);
 
-      allPeople.forEach((p) => {
-        if (!p.uid) return;
-        const vPos = new THREE.Vector3(p.x, 2.2, p.z);
-        vPos.project(camera);
-        const x = (vPos.x * 0.5 + 0.5) * container.clientWidth;
-        const y = (-(vPos.y * 0.5) + 0.5) * container.clientHeight;
-        const visible = vPos.z < 1;
-        newScreenPos[p.uid] = { x, y, visible };
+        if (p.activeEffect && now < p.activeEffect.expireAt) {
+          if (p.activeEffect.type === 'faint') {
+            rData.mesh.rotation.z = Math.PI / 2;
+          } else if (p.activeEffect.type === 'duck') {
+            rData.mesh.rotation.y += 0.2;
+          }
+        } else {
+          rData.mesh.rotation.z = 0;
+        }
       });
-      screenPositionsRef.current = newScreenPos;
 
       renderer.render(scene, camera);
     };
@@ -429,7 +402,7 @@ export default function App() {
       window.removeEventListener('resize', handleResize);
       renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
     };
-  }, [threeLoaded, hasEnteredGame, selectedChar, onlinePlayers]);
+  }, [threeLoaded, hasEnteredGame, selectedChar, onlinePlayers, isSitting, user]);
 
   const handleSendChat = async (e) => {
     e.preventDefault();
@@ -507,22 +480,8 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans m-0 p-0">
       
-      {uiToast && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-          <div className="px-5 py-3 rounded-2xl shadow-2xl border-2 bg-slate-900 text-white flex items-center gap-3 border-pink-500 shadow-pink-500/20">
-            <BellRing className="w-5 h-5 text-pink-400" />
-            <div>
-              <h4 className="font-bold text-sm text-pink-400">Tương Tác Công Viên</h4>
-              <p className="text-xs text-slate-300 font-medium">{String(uiToast.desc)}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Layout Container (Cân đối hoàn toàn màn hình, không bị lệch lề) */}
       <div className="flex-1 flex flex-col h-full w-full relative overflow-hidden">
         
-        {/* Header */}
         <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0 w-full">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-pink-600 rounded-xl text-white shadow-md"><Sparkles className="w-5 h-5" /></div>
@@ -539,51 +498,9 @@ export default function App() {
           </button>
         </header>
 
-        {/* 3D Viewport */}
         <div className="flex-1 relative overflow-hidden flex flex-col w-full h-full">
           <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing relative" />
 
-          {/* Bong bóng chat 3D bám chuẩn vị trí đầu từng người chơi */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden z-30">
-            {speechBubbles.map((bubble) => {
-              const pos = screenPositionsRef.current[bubble.uid];
-              if (!pos || !pos.visible) return null;
-              return (
-                <div
-                  key={bubble.id}
-                  className="absolute transform -translate-x-1/2 -translate-y-full transition-all duration-200"
-                  style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-                >
-                  <div className="bg-white text-slate-950 px-4 py-2 rounded-2xl shadow-xl border-2 border-pink-500 text-xs font-bold flex items-center gap-2">
-                    <MessageSquare className="w-3.5 h-3.5 text-pink-500" />
-                    <span><b>{bubble.senderName}:</b> {bubble.text}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Hiệu ứng trạng thái cá nhân */}
-          {myEffect && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 animate-bounce text-center">
-              <div className="px-6 py-4 rounded-3xl bg-slate-900/95 border-2 border-pink-500 shadow-2xl text-white space-y-1">
-                <div className="text-4xl">
-                  {myEffect === 'duck' && '🦆💫'}
-                  {myEffect === 'faint' && '💤😵'}
-                  {myEffect === 'flower' && '🌸💐'}
-                  {myEffect === 'candy' && '🍬🍭'}
-                </div>
-                <div className="font-bold text-sm text-pink-300">
-                  {myEffect === 'duck' && 'Đang bị ném giấy choáng váng!'}
-                  {myEffect === 'faint' && 'Đang bị gạt chân ngã nằm ngang!'}
-                  {myEffect === 'flower' && 'Nhận được hoa tươi thắm!'}
-                  {myEffect === 'candy' && 'Nhận được kẹo ngọt ngào!'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Danh sách người chơi online để bấm vào chọc ghẹo */}
           <div className="absolute top-4 left-6 z-20 bg-slate-900/90 backdrop-blur border border-slate-800 p-3 rounded-2xl shadow-xl max-w-xs space-y-2">
             <div className="text-xs font-bold text-pink-400 uppercase tracking-wider">Người chơi trong công viên:</div>
             <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
@@ -604,7 +521,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Modal Chọn Hành Động Chọc Ghẹo */}
           {targetPlayer && (
             <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
               <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
@@ -614,45 +530,32 @@ export default function App() {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                <p className="text-xs text-slate-400">Chọn hành động gửi trực tiếp đến người chơi này:</p>
+                <p className="text-xs text-slate-400">Chọn hoạt ảnh 3D tác động ngay lập tức lên nhân vật:</p>
                 <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
                   <button
-                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'duck', 'ném cục giấy choáng váng')}
+                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'duck')}
                     className="p-3 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition flex flex-col items-center gap-1"
                   >
                     <span className="text-xl">📄</span> Ném Giấy (Vịt Xoay 3s)
                   </button>
                   <button
-                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'faint', 'gạt chân té nằm ngang')}
+                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'faint')}
                     className="p-3 rounded-2xl bg-slate-800 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500 text-rose-400 transition flex flex-col items-center gap-1"
                   >
                     <span className="text-xl">🦶</span> Gạt Chân (Té Ngang 3s)
-                  </button>
-                  <button
-                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'flower', 'tặng đóa hoa tươi')}
-                    className="p-3 rounded-2xl bg-slate-800 hover:bg-pink-600/20 border border-slate-700 hover:border-pink-500 text-pink-400 transition flex flex-col items-center gap-1"
-                  >
-                    <span className="text-xl">🌸</span> Tặng Hoa
-                  </button>
-                  <button
-                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'candy', 'tặng viên kẹo ngọt')}
-                    className="p-3 rounded-2xl bg-slate-800 hover:bg-purple-600/20 border border-slate-700 hover:border-purple-500 text-purple-400 transition flex flex-col items-center gap-1"
-                  >
-                    <span className="text-xl">🍬</span> Tặng Kẹo
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Khung Chat Nhập Liệu */}
           <div className="absolute bottom-6 left-6 right-6 z-20 flex justify-center">
             <form onSubmit={handleSendChat} className="flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-slate-800 p-2 rounded-2xl shadow-xl w-full max-w-md">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Nhập chat hiện bong bóng trên đầu 5 giây..."
+                placeholder="Nhập chat hiển thị bong bóng trên đầu 5 giây..."
                 className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 focus:outline-none focus:border-pink-500 text-white"
               />
               <button type="submit" className="p-2.5 bg-pink-600 hover:bg-pink-500 rounded-xl text-white shadow-md transition">
@@ -666,3 +569,5 @@ export default function App() {
     </div>
   );
 }
+```
+eof
