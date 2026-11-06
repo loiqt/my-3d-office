@@ -1,16 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  getFirestore, collection, doc, setDoc, onSnapshot, serverTimestamp 
-} from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { 
   Monitor, Flower2, Smile, Coffee, Volume2, VolumeX, MessageSquare, 
-  Users, RotateCcw, Plus, Trash2, Sun, Moon, Send, X, Building2,
-  User, RotateCw, Edit3, Check, Navigation, LayoutGrid, Armchair, LogOut,
-  Move, Package, Sparkles, BellRing
+  Users, Plus, Trash2, Send, X, Building2, User, Move, Package, BellRing, ZoomIn
 } from 'lucide-react';
 
 // --- Firebase Initialization ---
@@ -29,7 +23,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- Web Audio Synthesizer ---
+// --- Sound Synthesizer ---
 class WorkplaceSoundSystem {
   constructor() { this.ctx = null; }
   init() {
@@ -58,26 +52,16 @@ class WorkplaceSoundSystem {
         osc.frequency.exponentialRampToValueAtTime(800, now + 0.08);
         gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
         osc.start(now); osc.stop(now + 0.1);
-      } else if (type === 'drag') {
-        osc.type = 'triangle'; osc.frequency.setValueAtTime(260, now);
-        osc.frequency.linearRampToValueAtTime(340, now + 0.04);
-        gain.gain.setValueAtTime(0.08, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.04);
-        osc.start(now); osc.stop(now + 0.04);
-      } else if (type === 'place') {
-        osc.type = 'triangle'; osc.frequency.setValueAtTime(220, now);
-        osc.frequency.exponentialRampToValueAtTime(440, now + 0.08);
-        gain.gain.setValueAtTime(0.18, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-        osc.start(now); osc.stop(now + 0.08);
       } else if (type === 'throw') {
         osc.type = 'sine'; osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(900, now + 0.12);
-        gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
-        osc.start(now); osc.stop(now + 0.12);
+        osc.frequency.exponentialRampToValueAtTime(900, now + 0.15);
+        gain.gain.setValueAtTime(0.18, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now); osc.stop(now + 0.15);
       } else if (type === 'trip') {
         osc.type = 'sawtooth'; osc.frequency.setValueAtTime(300, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now + 0.2);
-        gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now); osc.stop(now + 0.2);
+        osc.frequency.exponentialRampToValueAtTime(60, now + 0.3);
+        gain.gain.setValueAtTime(0.25, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
       } else if (type === 'step') {
         osc.type = 'sine'; osc.frequency.setValueAtTime(120, now);
         osc.frequency.exponentialRampToValueAtTime(60, now + 0.03);
@@ -94,7 +78,7 @@ const DECOR_INVENTORY = {
   tech: [
     { type: 'laptop', name: 'Laptop Gaming', icon: '💻', color: '#1e293b' },
     { type: 'dual_monitors', name: 'Màn hình Kép', icon: '🖥️', color: '#0f172a' },
-    { type: 'keyboard', name: 'Bàn phím cơ', icon: '⌨️', color: '#3b82f6' }
+    { type: 'keyboard', name: 'Bàn phím cơ RGB', icon: '⌨️', color: '#3b82f6' }
   ],
   plants: [
     { type: 'succulent', name: 'Chậu Sen Đá', icon: '🪴', color: '#10b981' },
@@ -112,7 +96,7 @@ const DEFAULT_DESK_ITEMS = {
   1: [
     { id: 'item-1', type: 'dual_monitors', x: 0, z: -0.1, rotY: 0, scale: 1, color: '#0f172a' },
     { id: 'item-2', type: 'coffee_mug', x: -0.6, z: 0.2, rotY: 0, scale: 0.7, color: '#f97316' },
-    { id: 'item-3', type: 'teddy_bear', x: 0.6, z: -0.2, rotY: -0.4, scale: 0.9, color: '#d97706' }
+    { id: 'item-3', type: 'rubber_duck', x: 0.6, z: -0.2, rotY: 0, scale: 0.8, color: '#eab308' }
   ],
   2: [
     { id: 'item-21', type: 'laptop', x: 0, z: 0, rotY: 0, scale: 1, color: '#1e293b' },
@@ -144,15 +128,12 @@ function createSpeechBubbleTexture(text, senderName) {
   const ctx = canvas.getContext('2d');
 
   ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
-  ctx.strokeStyle = '#3b82f6';
-  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 6;
   if (ctx.roundRect) ctx.roundRect(16, 16, 480, 170, 24); else ctx.fillRect(16, 16, 480, 170);
   ctx.fill(); ctx.stroke();
 
-  ctx.beginPath();
-  ctx.moveTo(240, 186); ctx.lineTo(256, 220); ctx.lineTo(272, 186);
-  ctx.closePath();
-  ctx.fillStyle = '#3b82f6'; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(240, 186); ctx.lineTo(256, 220); ctx.lineTo(272, 186);
+  ctx.closePath(); ctx.fillStyle = '#3b82f6'; ctx.fill();
 
   ctx.fillStyle = '#60a5fa'; ctx.font = 'bold 24px Inter, sans-serif';
   ctx.fillText(senderName, 36, 52);
@@ -171,45 +152,48 @@ function createSpeechBubbleTexture(text, senderName) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// Xây dựng Object 3D Trang trí Bàn
+// Xây dựng Object 3D Trang trí Bàn (Không tạo đổ bóng)
 function createItemMesh(item) {
   const THREE = window.THREE;
   const group = new THREE.Group();
   const color = parseInt((item.color || '#ffffff').replace('#', '0x'));
-  const mat = new THREE.MeshStandardMaterial({ color });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.2 });
 
   if (item.type === 'laptop') {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.35), mat);
-    base.position.y = 0.015;
-    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.03), new THREE.MeshStandardMaterial({ color: 0x111111 }));
-    screen.position.set(0, 0.15, -0.16);
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.025, 0.36), mat); base.position.y = 0.012;
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.32, 0.025), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.1 }));
+    screen.position.set(0, 0.16, -0.17); screen.rotation.x = -0.1;
     group.add(base, screen);
   } else if (item.type === 'dual_monitors') {
-    const m1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.05), mat);
-    m1.position.set(-0.26, 0.2, 0); m1.rotation.y = 0.2;
-    const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.05), mat);
-    m2.position.set(0.26, 0.2, 0); m2.rotation.y = -0.2;
-    group.add(m1, m2);
+    const m1 = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.32, 0.04), mat); m1.position.set(-0.27, 0.2, 0); m1.rotation.y = 0.25;
+    const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.32, 0.04), mat); m2.position.set(0.27, 0.2, 0); m2.rotation.y = -0.25;
+    const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.2), new THREE.MeshStandardMaterial({ color: 0x64748b })); stand.position.y = 0.1;
+    group.add(m1, m2, stand);
   } else if (item.type === 'coffee_mug') {
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 12), mat);
-    mug.position.y = 0.06;
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.12, 16), mat); mug.position.y = 0.06;
     group.add(mug);
+  } else if (item.type === 'rubber_duck') {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.2 }));
+    body.position.y = 0.05; body.scale.set(1.2, 0.9, 1.4);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12), new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.2 }));
+    head.position.set(0, 0.11, 0.05);
+    group.add(body, head);
   } else if (item.type === 'succulent' || item.type === 'bonsai' || item.type === 'monstera') {
-    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.1, 12), new THREE.MeshStandardMaterial({ color: 0xffffff }));
-    pot.position.y = 0.05;
-    const plant = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), mat);
-    plant.position.y = 0.15;
+    const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.05, 0.1, 12), new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 })); pot.position.y = 0.05;
+    const plant = new THREE.Mesh(new THREE.DodecahedronGeometry(0.1), mat); plant.position.y = 0.14;
     group.add(pot, plant);
+  } else if (item.type === 'teddy_bear') {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), mat); body.position.y = 0.08;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), mat); head.position.y = 0.18;
+    group.add(body, head);
   } else {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), mat);
-    box.position.y = 0.1;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), mat); box.position.y = 0.1;
     group.add(box);
   }
 
-  group.position.set(item.x || (Math.random()*0.8 - 0.4), 0.75, item.z || (Math.random()*0.4 - 0.2));
+  group.position.set(item.x || 0, 0.75, item.z || 0);
   if (item.rotY) group.rotation.y = item.rotY;
   if (item.scale) group.scale.set(item.scale, item.scale, item.scale);
-  
   return group;
 }
 
@@ -218,21 +202,19 @@ export default function App() {
   const [hasOnboarded, setHasOnboarded] = useState(false);
   const [officeName] = useState('VĂN PHÒNG SÁNG TẠO SÀI GÒN');
 
-  const [characterConfig, setCharacterConfig] = useState({
-    name: 'Bạn (Player)', color: '#3b82f6'
-  });
-
+  const [characterConfig, setCharacterConfig] = useState({ name: 'Bạn (Player)', color: '#3b82f6' });
   const [selectedDeskId, setSelectedDeskId] = useState(null);
   const [deskConfigs, setDeskConfigs] = useState(DEFAULT_DESK_ITEMS);
   const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [isLayoutMode, setIsLayoutMode] = useState(false);
   const [activeTargetTeammate, setActiveTargetTeammate] = useState(null);
   const [activeRightTab, setActiveRightTab] = useState('chat');
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  
-  // Custom Toast UI (Thay thế cho Alert xấu xí)
   const [uiToast, setUiToast] = useState(null);
+
+  // Quản lý hiệu ứng chọc ghẹo hoạt ảnh đặc biệt
+  const [duckEffectActive, setDuckEffectActive] = useState(false); // Vịt xoay 3 giây
+  const [faintEffectActive, setFaintEffectActive] = useState(false); // Té xỉu 3 giây
 
   const [deskLayoutPositions, setDeskLayoutPositions] = useState(() => {
     const pos = {}; for (let i = 1; i <= 15; i++) pos[i] = getDefaultDesk3DPosition(i); return pos;
@@ -248,8 +230,10 @@ export default function App() {
   const playerPosRef = useRef({ x: -3.5 * 2.55, z: 3.2, targetX: -3.5 * 2.55, targetZ: 3.2 });
   
   const desk3DMeshMapRef = useRef({});
-  const deskItemGroupsRef = useRef({}); // Nhóm chứa đồ vật trang trí cho từng bàn
+  const deskItemGroupsRef = useRef({});
   const activeBubblesRef = useRef({});
+  const playerGroupRef = useRef(null); // Tham chiếu đến group nhân vật chính để làm hoạt ảnh té xỉu / vịt xoay
+  const cameraTargetFocusRef = useRef(null);
 
   const deskLayoutPositionsRef = useRef(deskLayoutPositions); deskLayoutPositionsRef.current = deskLayoutPositions;
   const deskConfigsRef = useRef(deskConfigs); deskConfigsRef.current = deskConfigs;
@@ -263,9 +247,7 @@ export default function App() {
 
   useEffect(() => {
     const saved = localStorage.getItem('user_3d_avatar');
-    if (saved) {
-      try { setCharacterConfig(JSON.parse(saved)); setHasOnboarded(true); } catch (e) {}
-    }
+    if (saved) { try { setCharacterConfig(JSON.parse(saved)); setHasOnboarded(true); } catch (e) {} }
   }, []);
 
   useEffect(() => {
@@ -278,9 +260,7 @@ export default function App() {
 
   useEffect(() => {
     if (!auth) return;
-    const initAuth = async () => {
-      try { await signInAnonymously(auth); } catch (e) {}
-    };
+    const initAuth = async () => { try { await signInAnonymously(auth); } catch (e) {} };
     initAuth();
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
@@ -298,7 +278,6 @@ export default function App() {
         if (data.items) loadedDesks[docSnap.id] = data.items;
         if (data.position) loadedPositions[docSnap.id] = data.position;
       });
-
       setDeskConfigs(loadedDesks);
 
       if (Object.keys(loadedPositions).length > 0) {
@@ -359,7 +338,7 @@ export default function App() {
   const teammatesRef = useRef(teammates); teammatesRef.current = teammates;
   const onlinePlayersRef = useRef(onlinePlayers); onlinePlayersRef.current = onlinePlayers;
 
-  // 3D Engine Setup
+  // 3D Engine Setup (Loại bỏ toàn bộ đổ bóng để tối ưu hiệu năng mượt mà tuyệt đối)
   useEffect(() => {
     if (!threeLoaded || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -367,7 +346,7 @@ export default function App() {
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0f172a);
-    scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
+    scene.fog = new THREE.FogExp2(0x0f172a, 0.012);
 
     const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -376,7 +355,6 @@ export default function App() {
     while (container.firstChild) container.removeChild(container.firstChild);
     container.appendChild(renderer.domElement);
 
-    // --- FIX KHUNG MÀN HÌNH TRẮNG KHI RESIZE TRÌNH DUYỆT ---
     const handleResize = () => {
       if (!container) return;
       camera.aspect = container.clientWidth / container.clientHeight;
@@ -385,24 +363,23 @@ export default function App() {
     };
     window.addEventListener('resize', handleResize);
 
-    scene.add(new THREE.AmbientLight(0xfff7ed, 1.1));
-    const sunLight = new THREE.DirectionalLight(0xffedd5, 1.3);
-    sunLight.position.set(-20, 30, 22);
+    scene.add(new THREE.AmbientLight(0xfff7ed, 1.2));
+    const sunLight = new THREE.DirectionalLight(0xffedd5, 1.4);
+    sunLight.position.set(-20, 35, 25);
     scene.add(sunLight);
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 30), new THREE.MeshStandardMaterial({ color: 0x241d17, roughness: 0.4 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 30), new THREE.MeshBasicMaterial({ color: 0x1e1b18 }));
     floor.rotation.x = -Math.PI / 2; floor.userData = { isFloorPlane: true }; scene.add(floor);
 
-    const backWall = new THREE.Mesh(new THREE.BoxGeometry(44, 11, 0.4), new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 }));
-    backWall.position.set(0, 5.5, -14); scene.add(backWall);
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(44, 12, 0.4), new THREE.MeshBasicMaterial({ color: 0x0f172a }));
+    backWall.position.set(0, 6, -14); scene.add(backWall);
 
-    // Cây trang trí góc
     const createPlantMesh = (x, z) => {
       const pGroup = new THREE.Group(); pGroup.position.set(x, 0, z);
-      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.3, 0.8, 12), new THREE.MeshStandardMaterial({ color: 0xffffff })); pot.position.y = 0.4; pGroup.add(pot);
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.35, 0.9, 12), new THREE.MeshBasicMaterial({ color: 0x334155 })); pot.position.y = 0.45; pGroup.add(pot);
       for (let i = 0; i < 5; i++) {
-        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 8), new THREE.MeshStandardMaterial({ color: 0x10b981 }));
-        leaf.position.set((Math.random()-0.5)*0.3, 0.9+i*0.25, (Math.random()-0.5)*0.3); pGroup.add(leaf);
+        const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.45, 6, 6), new THREE.MeshBasicMaterial({ color: 0x059669 }));
+        leaf.position.set((Math.random()-0.5)*0.3, 1 + i * 0.25, (Math.random()-0.5)*0.3); pGroup.add(leaf);
       }
       scene.add(pGroup);
     };
@@ -414,9 +391,18 @@ export default function App() {
     function createHumanMesh(tm, isPlayer = false) {
       const group = new THREE.Group();
       const col = tm.color ? parseInt(tm.color.replace('#', '0x')) : 0x3b82f6;
-      const mat = new THREE.MeshStandardMaterial({ color: col });
+      const mat = new THREE.MeshBasicMaterial({ color: col });
       const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.48, 0.24), mat); torso.position.y = 0.72; group.add(torso);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 16), new THREE.MeshStandardMaterial({ color: 0xfde047 })); head.position.y = 1.1; group.add(head);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 12), new THREE.MeshBasicMaterial({ color: 0xfde047 })); head.position.y = 1.1; group.add(head);
+      
+      // Sprite Vịt xoay trên đầu khi bị ném giấy
+      const duckCanvas = document.createElement('canvas'); duckCanvas.width = 128; duckCanvas.height = 128;
+      const dCtx = duckCanvas.getContext('2d'); dCtx.font = '80px sans-serif'; dCtx.fillText('🦆', 24, 96);
+      const duckSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(duckCanvas), transparent: true }));
+      duckSprite.scale.set(0.7, 0.7, 1); duckSprite.position.set(0, 1.5, 0); duckSprite.visible = false;
+      duckSprite.name = 'duckSprite';
+      group.add(duckSprite);
+
       if (!isPlayer) { group.position.set(0, 0, 0.75); group.position.y = 0.15; }
       group.userData = { teammateId: tm.id || tm.uid, isAvatarObject: true, name: tm.name };
       return group;
@@ -430,21 +416,18 @@ export default function App() {
       deskGroup.userData = { deskId: tm.id, isDeskUnit: true, name: tm.name };
       desk3DMeshMapRef.current[tm.id] = deskGroup;
 
-      const table = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 1.3), new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.4 })); table.position.y = 0.71; deskGroup.add(table);
-      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.65), new THREE.MeshStandardMaterial({ color: 0x1e293b })); chair.position.set(0, 0.45, 0.8); chair.userData = { isChair: true, deskId: tm.id }; deskGroup.add(chair);
+      const table = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.08, 1.3), new THREE.MeshBasicMaterial({ color: 0x475569 })); table.position.y = 0.71; deskGroup.add(table);
+      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.65), new THREE.MeshBasicMaterial({ color: 0x1e293b })); chair.position.set(0, 0.45, 0.8); chair.userData = { isChair: true, deskId: tm.id }; deskGroup.add(chair);
 
-      // Nametag
       const bubbleCanvas = document.createElement('canvas'); bubbleCanvas.width = 280; bubbleCanvas.height = 120; const bCtx = bubbleCanvas.getContext('2d');
-      bCtx.fillStyle = 'rgba(15, 23, 42, 0.88)'; if (bCtx.roundRect) bCtx.roundRect(10, 10, 260, 100, 16); else bCtx.fillRect(10, 10, 260, 100);
+      bCtx.fillStyle = 'rgba(15, 23, 42, 0.9)'; if (bCtx.roundRect) bCtx.roundRect(10, 10, 260, 100, 16); else bCtx.fillRect(10, 10, 260, 100);
       bCtx.fill(); bCtx.lineWidth = 4; bCtx.strokeStyle = tm.color || '#3b82f6'; bCtx.stroke();
       bCtx.fillStyle = '#ffffff'; bCtx.font = 'bold 24px Inter, sans-serif'; bCtx.textAlign = 'center';
-      bCtx.fillText(`${tm.emotion || '💻'} Bàn #${tm.id}`, 140, 50); bCtx.font = '20px Inter, sans-serif'; bCtx.fillStyle = '#60a5fa'; bCtx.fillText(tm.name, 140, 85);
+      bCtx.fillText(`💻 Bàn #${tm.id}`, 140, 50); bCtx.font = '20px Inter, sans-serif'; bCtx.fillStyle = '#60a5fa'; bCtx.fillText(tm.name, 140, 85);
       const bubbleSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(bubbleCanvas), transparent: true }));
       bubbleSprite.scale.set(1.9, 0.9, 1); bubbleSprite.position.set(0, 2.35, 0); deskGroup.add(bubbleSprite);
 
-      // --- FIX ĐỒ TRANG TRÍ BÀN: Khởi tạo Group chứa Items ---
-      const itemsGroup = new THREE.Group();
-      deskGroup.add(itemsGroup);
+      const itemsGroup = new THREE.Group(); deskGroup.add(itemsGroup);
       deskItemGroupsRef.current[tm.id] = itemsGroup;
 
       if (!tm.isUser && !tm.isRealPlayer) {
@@ -454,9 +437,11 @@ export default function App() {
     });
 
     const playerGroup = new THREE.Group(); playerGroup.position.set(playerPosRef.current.x, 0, playerPosRef.current.z);
-    playerGroup.add(createHumanMesh(teammatesRef.current[0], true)); scene.add(playerGroup);
+    const playerMesh = createHumanMesh(teammatesRef.current[0], true);
+    playerGroup.add(playerMesh); scene.add(playerGroup);
+    playerGroupRef.current = playerGroup;
 
-    let camAngleX = 0, camAngleY = 0.5, camDist = 24;
+    let camAngleX = 0, camAngleY = 0.5, camDist = 22;
     let isMouseDown = false, prevMousePos = { x: 0, y: 0 };
     let isDraggingEntireDesk = false, activeDraggedDeskId = null;
 
@@ -489,9 +474,16 @@ export default function App() {
           if (isLayoutModeRef.current && clickedDeskId) {
             isDraggingEntireDesk = true; activeDraggedDeskId = clickedDeskId; sfx.play('drag'); return;
           }
-          if (clickedDeskId) { setSelectedDeskId(clickedDeskId); sfx.play('click'); return; }
+          if (clickedDeskId) {
+            setSelectedDeskId(clickedDeskId);
+            cameraTargetFocusRef.current = clickedDeskId;
+            sfx.play('click');
+            return;
+          }
           if (intersects[i].object.userData?.isFloorPlane && !isLayoutModeRef.current) {
-            playerPosRef.current.targetX = intersects[i].point.x; playerPosRef.current.targetZ = intersects[i].point.z; sfx.play('step');
+            playerPosRef.current.targetX = intersects[i].point.x; playerPosRef.current.targetZ = intersects[i].point.z;
+            cameraTargetFocusRef.current = null;
+            sfx.play('step');
           }
         }
       }
@@ -544,24 +536,32 @@ export default function App() {
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const nowSec = Date.now() / 1000;
 
-      // 1. CẬP NHẬT ĐỒ TRANG TRÍ BÀN KHI THAY ĐỔI
+      // Cập nhật trang trí bàn
       const currentConfigsStr = JSON.stringify(deskConfigsRef.current);
       if (lastConfigsStr !== currentConfigsStr) {
         lastConfigsStr = currentConfigsStr;
         Object.keys(deskItemGroupsRef.current).forEach(deskId => {
           const itemsGroup = deskItemGroupsRef.current[deskId];
-          while (itemsGroup.children.length > 0) itemsGroup.remove(itemsGroup.children[0]); // Clear old items
+          while (itemsGroup.children.length > 0) itemsGroup.remove(itemsGroup.children[0]);
           const items = deskConfigsRef.current[deskId] || [];
-          items.forEach(item => itemsGroup.add(createItemMesh(item))); // Draw new items
+          items.forEach(item => itemsGroup.add(createItemMesh(item)));
         });
       }
 
-      // 2. DI CHUYỂN NHÂN VẬT
+      // Di chuyển nhân vật
       const curr = playerPosRef.current;
       curr.x += (curr.targetX - curr.x) * 0.12; curr.z += (curr.targetZ - curr.z) * 0.12;
       playerGroup.position.set(curr.x, 0, curr.z);
+
+      let targetCamLookX = 0, targetCamLookZ = 0;
+      if (cameraTargetFocusRef.current && deskLayoutPositionsRef.current[cameraTargetFocusRef.current]) {
+        const focusedDeskPos = deskLayoutPositionsRef.current[cameraTargetFocusRef.current];
+        targetCamLookX = focusedDeskPos.x; targetCamLookZ = focusedDeskPos.z;
+        camDist = 12;
+      } else {
+        camDist = 22;
+      }
 
       if (user && db && (Math.abs(curr.targetX - curr.x) > 0.05 || Math.abs(curr.targetZ - curr.z) > 0.05)) {
         try {
@@ -580,49 +580,13 @@ export default function App() {
         rMesh.position.set(rp.x || 0, 0, rp.z || 0);
       });
 
-      // 3. XỬ LÝ BONG BÓNG CHAT 3D TRÊN ĐẦU
-      const recentMsgs = chatMessagesRef.current;
-      const latestSenderMsgs = {};
-      recentMsgs.forEach((m) => {
-        const mTime = m.createdAt || m.timestamp?.seconds || (Date.now() / 1000);
-        if (nowSec - mTime < 6) latestSenderMsgs[m.senderName] = m;
-      });
-
-      Object.keys(activeBubblesRef.current).forEach((senderKey) => {
-        if (!latestSenderMsgs[senderKey]) {
-          const bubbleObj = activeBubblesRef.current[senderKey];
-          if (bubbleObj && bubbleObj.parent) bubbleObj.parent.remove(bubbleObj);
-          delete activeBubblesRef.current[senderKey];
-        }
-      });
-
-      Object.entries(latestSenderMsgs).forEach(([senderName, msg]) => {
-        let targetMesh = null;
-        if (senderName === characterConfig.name) targetMesh = playerGroup;
-        else {
-          const foundOnline = onlinePlayersRef.current.find((p) => p.name === senderName);
-          if (foundOnline && remoteMeshMap[foundOnline.uid]) targetMesh = remoteMeshMap[foundOnline.uid];
-          else {
-            const foundTeammate = teammatesRef.current.find((t) => t.name === senderName);
-            if (foundTeammate && desk3DMeshMapRef.current[foundTeammate.id]) targetMesh = desk3DMeshMapRef.current[foundTeammate.id];
-          }
-        }
-        if (targetMesh) {
-          let bubbleSprite = activeBubblesRef.current[senderName];
-          if (!bubbleSprite || bubbleSprite.userData?.text !== msg.text) {
-            if (bubbleSprite && bubbleSprite.parent) bubbleSprite.parent.remove(bubbleSprite);
-            bubbleSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createSpeechBubbleTexture(msg.text, senderName), transparent: true }));
-            bubbleSprite.scale.set(3.2, 1.6, 1);
-            bubbleSprite.position.set(0, targetMesh.userData?.isDeskUnit ? 3.3 : 2.1, 0);
-            bubbleSprite.userData = { text: msg.text };
-            targetMesh.add(bubbleSprite);
-            activeBubblesRef.current[senderName] = bubbleSprite;
-          }
-        }
-      });
-
-      camera.position.set(camDist*Math.sin(camAngleX)*Math.cos(camAngleY), camDist*Math.sin(camAngleY), camDist*Math.cos(camAngleX)*Math.cos(camAngleY));
-      camera.lookAt(0, 0, 0); renderer.render(scene, camera);
+      camera.position.set(
+        targetCamLookX + camDist * Math.sin(camAngleX) * Math.cos(camAngleY),
+        camDist * Math.sin(camAngleY),
+        targetCamLookZ + camDist * Math.cos(camAngleX) * Math.cos(camAngleY)
+      );
+      camera.lookAt(targetCamLookX, 0, targetCamLookZ);
+      renderer.render(scene, camera);
     };
     animate();
 
@@ -635,6 +599,46 @@ export default function App() {
     };
   }, [threeLoaded]);
 
+  // Kích hoạt hiệu ứng Ném giấy (Vịt xoay 3 giây trên đầu)
+  const triggerDuckEffect = () => {
+    setDuckEffectActive(true);
+    sfx.play('throw');
+    showToast('Bị Ném Giấy!', 'Bạn bị chọi giấy choáng váng, vịt xoay trên đầu 3 giây! 🦆', 'amber');
+    
+    if (playerGroupRef.current) {
+      const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
+      if (duckSprite) duckSprite.visible = true;
+    }
+
+    setTimeout(() => {
+      setDuckEffectActive(false);
+      if (playerGroupRef.current) {
+        const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
+        if (duckSprite) duckSprite.visible = false;
+      }
+    }, 3000);
+  };
+
+  // Kích hoạt hiệu ứng Gạt chân (Té xỉu nằm ngửa 3 giây)
+  const triggerFaintEffect = () => {
+    setFaintEffectActive(true);
+    sfx.play('trip');
+    showToast('Bị Ngáng Chân!', 'Bạn bị gạt chân và té xỉu dưới sàn 3 giây! 💫', 'rose');
+
+    if (playerGroupRef.current) {
+      playerGroupRef.current.rotation.z = Math.PI / 2; // Ngả ngang người ngã xuống sàn
+      playerGroupRef.current.position.y = -0.4;
+    }
+
+    setTimeout(() => {
+      setFaintEffectActive(false);
+      if (playerGroupRef.current) {
+        playerGroupRef.current.rotation.z = 0; // Đứng dậy bình thường
+        playerGroupRef.current.position.y = 0;
+      }
+    }, 3000);
+  };
+
   const handleSendMessage = (e) => {
     e.preventDefault(); if (!inputMessage.trim()) return;
     const currentSec = Date.now() / 1000;
@@ -644,10 +648,9 @@ export default function App() {
   };
 
   return (
-    // FIX KHUNG MÀN HÌNH: absolute inset-0 w-full h-full chống bị co hẹp CSS
-    <div className="absolute inset-0 w-full h-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="absolute inset-0 w-full h-full flex flex-col bg-slate-950 text-slate-100 overflow-hidden font-sans">
       
-      {/* HIỆU ỨNG THÔNG BÁO XINH XẮN (Thay cho Alert) */}
+      {/* Toast thông báo hoạt ảnh */}
       {uiToast && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
           <div className={`px-5 py-3 rounded-2xl shadow-2xl border-2 bg-slate-900 text-white flex items-center gap-3 border-${uiToast.colorClass}-500 shadow-${uiToast.colorClass}-500/20`}>
@@ -661,16 +664,19 @@ export default function App() {
       )}
 
       {/* Header Bar */}
-      <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0">
+      <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0 shadow-lg">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-600 rounded-xl text-white"><Building2 className="w-5 h-5" /></div>
-          <div><h1 className="font-bold text-amber-400 font-serif text-base">🏛️ {officeName}</h1></div>
+          <div className="p-2 bg-blue-600 rounded-xl text-white shadow-md"><Building2 className="w-5 h-5" /></div>
+          <div><h1 className="font-bold text-amber-400 font-serif text-base tracking-wide">🏛️ {officeName}</h1></div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setIsLayoutMode(!isLayoutMode)} className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${isLayoutMode ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'}`}>
+          <button onClick={() => setIsLayoutMode(!isLayoutMode)} className={`px-3.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${isLayoutMode ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
             <Move className="w-3.5 h-3.5" /> {isLayoutMode ? 'Đang Sắp Xếp Bàn' : '🛠️ Sắp Xếp Bàn'}
           </button>
-          <button className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold">{characterConfig.name}</button>
+          <button className="px-3.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold text-white flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: characterConfig.color }} />
+            {characterConfig.name}
+          </button>
         </div>
       </header>
 
@@ -678,48 +684,93 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 relative bg-slate-950 overflow-hidden">
           <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing relative" />
+          
+          <div className="absolute top-4 left-6 bg-slate-900/85 backdrop-blur border border-slate-800 px-4 py-2 rounded-2xl text-[11px] text-slate-300 shadow-xl flex items-center gap-2">
+            <ZoomIn className="w-4 h-4 text-blue-400" /> Click chọn bàn để phóng to góc nhìn trang trí chi tiết
+          </div>
         </div>
 
         {/* Right Panel */}
         <div className="w-80 border-l border-slate-800 bg-slate-900 flex flex-col z-10 shrink-0 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.3)]">
           <div className="flex border-b border-slate-800">
-            <button onClick={() => setActiveRightTab('chat')} className={`flex-1 py-3 text-xs font-semibold ${activeRightTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Trò chuyện Live</button>
-            <button onClick={() => setActiveRightTab('decor')} className={`flex-1 py-3 text-xs font-semibold ${activeRightTab === 'decor' ? 'border-b-2 border-blue-500 text-blue-400' : 'text-slate-400'}`}>Trang trí Bàn</button>
+            <button onClick={() => setActiveRightTab('chat')} className={`flex-1 py-3 text-xs font-semibold transition ${activeRightTab === 'chat' ? 'border-b-2 border-blue-500 text-blue-400 bg-slate-800/40' : 'text-slate-400 hover:text-white'}`}>Trò chuyện Live</button>
+            <button onClick={() => setActiveRightTab('decor')} className={`flex-1 py-3 text-xs font-semibold transition ${activeRightTab === 'decor' ? 'border-b-2 border-blue-500 text-blue-400 bg-slate-800/40' : 'text-slate-400 hover:text-white'}`}>Trang trí Bàn (#{selectedDeskId || 1})</button>
           </div>
 
           {activeRightTab === 'chat' && (
             <div className="flex-1 flex flex-col overflow-hidden">
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {chatMessages.map((msg) => (
-                  <div key={msg.id} className="p-2.5 rounded-xl text-xs bg-slate-800 border border-slate-700">
+                  <div key={msg.id} className="p-2.5 rounded-xl text-xs bg-slate-800/80 border border-slate-700/80 shadow-sm">
                     <span className="font-semibold text-blue-400 block mb-1">{msg.senderName}</span>
-                    {msg.text}
+                    <span className="text-slate-200">{msg.text}</span>
                   </div>
                 ))}
               </div>
-              <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 flex gap-2">
-                <input type="text" value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} placeholder="Nhắn tin 3D..." className="flex-1 px-3 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 focus:outline-none focus:border-blue-500 text-white" />
-                <button type="submit" className="p-2 bg-blue-600 rounded-xl text-white"><Send className="w-4 h-4" /></button>
+              <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 flex gap-2 bg-slate-900">
+                <input type="text" value={inputMessage} onChange={(e) => setInputMessage(e.target.value)} placeholder="Nhắn tin 3D..." className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 focus:outline-none focus:border-blue-500 text-white" />
+                <button type="submit" className="p-2.5 bg-blue-600 hover:bg-blue-500 rounded-xl text-white shadow-md"><Send className="w-4 h-4" /></button>
               </form>
             </div>
           )}
 
           {activeRightTab === 'decor' && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-              <div className="font-bold text-slate-300">Vật phẩm trang trí Bàn #{selectedDeskId || 1}:</div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-5 text-xs">
+              <div className="bg-blue-950/40 border border-blue-800/50 p-3 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-blue-400 block">Đang chọn Bàn #{selectedDeskId || 1}</span>
+                  <span className="text-[11px] text-slate-400">Thêm hoặc xóa vật phẩm thời gian thực</span>
+                </div>
+                <Package className="w-5 h-5 text-blue-400" />
+              </div>
+
+              {/* Danh sách vật phẩm có nút Xóa */}
+              <div className="space-y-2">
+                <div className="font-semibold text-slate-300 uppercase tracking-wider text-[11px]">Vật phẩm hiện tại trên bàn:</div>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {(!deskConfigs[selectedDeskId || 1] || deskConfigs[selectedDeskId || 1].length === 0) ? (
+                    <div className="text-slate-500 italic p-2 text-center bg-slate-950/40 rounded-xl border border-slate-800">Bàn đang trống</div>
+                  ) : (
+                    deskConfigs[selectedDeskId || 1].map((item) => (
+                      <div key={item.id} className="flex items-center justify-between bg-slate-800/80 border border-slate-700 px-3 py-2 rounded-xl">
+                        <span className="font-medium text-white flex items-center gap-2">
+                          <span className="text-base">{item.icon || '📦'}</span> {item.name}
+                        </span>
+                        <button
+                          onClick={() => {
+                            const targetDesk = selectedDeskId || 1;
+                            const newItems = deskConfigs[targetDesk].filter(i => i.id !== item.id);
+                            setDeskConfigs(prev => ({ ...prev, [targetDesk]: newItems }));
+                            if (db) { try { setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'desks', String(targetDesk)), { items: newItems }, { merge: true }); } catch (e) {} }
+                            sfx.play('pop');
+                          }}
+                          className="p-1.5 hover:bg-rose-500/20 text-rose-400 rounded-lg transition"
+                          title="Xóa vật phẩm này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <hr className="border-slate-800" />
+
+              {/* Kho đồ để thêm */}
               {Object.entries(DECOR_INVENTORY).map(([cat, items]) => (
                 <div key={cat} className="space-y-2">
-                  <div className="font-semibold text-slate-400 uppercase text-[10px]">{cat}</div>
+                  <div className="font-semibold text-slate-400 uppercase tracking-wider text-[10px]">{cat}</div>
                   <div className="grid grid-cols-2 gap-2">
                     {items.map((it) => (
                       <button key={it.type} onClick={() => {
                         const targetDesk = selectedDeskId || 1;
-                        const newItems = [...(deskConfigs[targetDesk] || []), { id: `item-${Date.now()}`, ...it }];
+                        const newItems = [...(deskConfigs[targetDesk] || []), { id: `item-${Date.now()}`, ...it, x: (Math.random()*0.8 - 0.4), z: (Math.random()*0.4 - 0.2) }];
                         setDeskConfigs((prev) => ({ ...prev, [targetDesk]: newItems }));
                         if (db) { try { setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'desks', String(targetDesk)), { items: newItems }, { merge: true }); } catch (e) {} }
                         sfx.play('pop');
-                      }} className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 flex flex-col items-center gap-1">
-                        <span className="text-xl">{it.icon}</span><span className="font-semibold text-[11px]">{it.name}</span>
+                      }} className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 hover:border-blue-500 hover:bg-slate-800 flex flex-col items-center gap-1 transition">
+                        <span className="text-xl">{it.icon}</span><span className="font-semibold text-[11px] text-slate-200">{it.name}</span>
                       </button>
                     ))}
                   </div>
@@ -730,26 +781,26 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action Popup Modal khi chọn Nhân vật */}
+      {/* Action Popup Modal khi chọn Nhân vật khác */}
       {activeTargetTeammate && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-white">{activeTargetTeammate.name}</h3>
-              <button onClick={() => setActiveTargetTeammate(null)}><X className="w-4 h-4 text-slate-400" /></button>
+              <h3 className="font-bold text-white text-base">Tương tác với {activeTargetTeammate.name}</h3>
+              <button onClick={() => setActiveTargetTeammate(null)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400"><X className="w-4 h-4" /></button>
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
               <button
-                onClick={() => { sfx.play('throw'); showToast('Ném Giấy Thành Công!', `Bạn vừa chọi giấy vào ${activeTargetTeammate.name} 📄`, 'amber'); setActiveTargetTeammate(null); }}
-                className="p-3 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition"
+                onClick={() => { triggerDuckEffect(); setActiveTargetTeammate(null); }}
+                className="p-3.5 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition flex flex-col items-center gap-1.5"
               >
-                📄 Ném Cục Giấy
+                <span className="text-xl">📄</span> Ném Cục Giấy (Vịt Xoay 3s)
               </button>
               <button
-                onClick={() => { sfx.play('trip'); showToast('Gạt Chân Thành Công!', `Bạn đã ngáng chân làm ${activeTargetTeammate.name} té lộn nhào 🦶`, 'rose'); setActiveTargetTeammate(null); }}
-                className="p-3 rounded-2xl bg-slate-800 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500 text-rose-400 transition"
+                onClick={() => { triggerFaintEffect(); setActiveTargetTeammate(null); }}
+                className="p-3.5 rounded-2xl bg-slate-800 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500 text-rose-400 transition flex flex-col items-center gap-1.5"
               >
-                🦶 Gạt Chân Té
+                <span className="text-xl">💫</span> Gạt Chân (Ngã Xỉu 3s)
               </button>
             </div>
           </div>
