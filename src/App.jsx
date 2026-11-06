@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { Sparkles, MessageSquare, Send, BellRing } from 'lucide-react';
+import { Sparkles, MessageSquare, Send, BellRing, Armchair } from 'lucide-react';
 
 // --- Firebase Initialization ---
 const firebaseConfig = {
@@ -20,32 +20,28 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Bối cảnh cố định: Công Viên Hoa Anh Đào
 const SAKURA_THEME = {
   name: 'Công Viên Hoa Anh Đào (Sakura Dream)',
-  bgColor: '#1e1b4b',
   groundColor: '#065f46',
   skyColor: '#312e81',
-  accentColor: '#ec4899',
-  icon: '🌸'
 };
 
 const CARTOON_CHARACTERS = [
-  { id: 'c1', name: 'Bé Mèo Dễ Thương', icon: '🐱', color: '#ec4899' },
-  { id: 'c2', name: 'Cậu Chàng Siêu Quậy', icon: '🦊', color: '#f97316' },
-  { id: 'c3', name: 'Thỏ Con Tinh Nghịch', icon: '🐰', color: '#a855f7' },
-  { id: 'c4', name: 'Gấu Trúc Ngủ Gật', icon: '🐼', color: '#1e293b' },
-  { id: 'c5', name: 'Khuôn Mặt Hổ Báo', icon: '🐯', color: '#eab308' },
-  { id: 'c6', name: 'Kỳ Lân Mộng Mơ', icon: '🦄', color: '#06b6d4' },
-  { id: 'c7', name: 'Chú Cún Trung Thành', icon: '🐶', color: '#84cc16' },
-  { id: 'c8', name: 'Khỉ Con Lém Lỉnh', icon: '🐵', color: '#b45309' },
-  { id: 'c9', name: 'Ếch Xanh Vui Nhộn', icon: '🐸', color: '#10b981' },
-  { id: 'c10', name: 'Cánh Cụt Lạnh Lùng', icon: '🐧', color: '#3b82f6' },
-  { id: 'c11', name: 'Heo Con Mũm Mĩm', icon: '🐷', color: '#f43f5e' },
-  { id: 'c12', name: 'Sư Tử Hùm Xám', icon: '🦁', color: '#d97706' },
-  { id: 'c13', name: 'Cú Đêm Thông Thái', icon: '🦉', color: '#6366f1' },
-  { id: 'c14', name: 'Ong Vàng Chăm Chỉ', icon: '🐝', color: '#fbbf24' },
-  { id: 'c15', name: 'Bạch Tuộc Vui Vẻ', icon: '🐙', color: '#8b5cf6' }
+  { id: 'c1', name: 'Bé Mèo Dễ Thương', icon: '🐱', color: '#ec4899', hairColor: '#be185d' },
+  { id: 'c2', name: 'Cậu Chàng Siêu Quậy', icon: '🦊', color: '#f97316', hairColor: '#c2410c' },
+  { id: 'c3', name: 'Thỏ Con Tinh Nghịch', icon: '🐰', color: '#a855f7', hairColor: '#7e22ce' },
+  { id: 'c4', name: 'Gấu Trúc Ngủ Gật', icon: '🐼', color: '#1e293b', hairColor: '#0f172a' },
+  { id: 'c5', name: 'Khuôn Mặt Hổ Báo', icon: '🐯', color: '#eab308', hairColor: '#a16207' },
+  { id: 'c6', name: 'Kỳ Lân Mộng Mơ', icon: '🦄', color: '#06b6d4', hairColor: '#0e7490' },
+  { id: 'c7', name: 'Chú Cún Trung Thành', icon: '🐶', color: '#84cc16', hairColor: '#4d7c0f' },
+  { id: 'c8', name: 'Khỉ Con Lém Lỉnh', icon: '🐵', color: '#b45309', hairColor: '#78350f' },
+  { id: 'c9', name: 'Ếch Xanh Vui Nhộn', icon: '🐸', color: '#10b981', hairColor: '#047857' },
+  { id: 'c10', name: 'Cánh Cụt Lạnh Lùng', icon: '🐧', color: '#3b82f6', hairColor: '#1d4ed8' },
+  { id: 'c11', name: 'Heo Con Mũm Mĩm', icon: '🐷', color: '#f43f5e', hairColor: '#be123c' },
+  { id: 'c12', name: 'Sư Tử Hùm Xám', icon: '🦁', color: '#d97706', hairColor: '#92400e' },
+  { id: 'c13', name: 'Cú Đêm Thông Thái', icon: '🦉', color: '#6366f1', hairColor: '#4338ca' },
+  { id: 'c14', name: 'Ong Vàng Chăm Chỉ', icon: '🐝', color: '#fbbf24', hairColor: '#b45309' },
+  { id: 'c15', name: 'Bạch Tuộc Vui Vẻ', icon: '🐙', color: '#8b5cf6', hairColor: '#6d28d9' }
 ];
 
 export default function App() {
@@ -54,10 +50,9 @@ export default function App() {
   const [selectedChar, setSelectedChar] = useState(CARTOON_CHARACTERS[0]);
   const [customName, setCustomName] = useState('Bạn (Player)');
 
-  // Trò chuyện & Tương tác
   const [chatInput, setChatInput] = useState('');
-  const [activeBubble, setActiveBubble] = useState(null); // { text, senderName }
-  const [statusEffect, setStatusEffect] = useState(null); // { type, text }
+  const [activeBubble, setActiveBubble] = useState(null);
+  const [statusEffect, setStatusEffect] = useState(null);
   const [onlinePlayers, setOnlinePlayers] = useState([]);
   const [uiToast, setUiToast] = useState(null);
 
@@ -92,7 +87,6 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Firebase Realtime Sync: Đồng bộ Vị trí, Chat & Tương tác chọc ghẹo
   useEffect(() => {
     if (!db || !user || !hasEnteredGame) return;
 
@@ -133,6 +127,7 @@ export default function App() {
             name: customName,
             icon: selectedChar.icon,
             color: selectedChar.color,
+            hairColor: selectedChar.hairColor,
             x: playerPosRef.current.x,
             z: playerPosRef.current.z,
             lastSeen: serverTimestamp()
@@ -160,7 +155,7 @@ export default function App() {
     }
   };
 
-  // --- 3D Scene Setup ---
+  // --- 3D Scene Setup với Nhân vật đầy đủ tay chân và cảnh quan ghế đá ---
   useEffect(() => {
     if (!threeLoaded || !hasEnteredGame || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -169,8 +164,8 @@ export default function App() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SAKURA_THEME.skyColor);
 
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.set(0, 7, 10);
+    const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(0, 8, 14);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -180,67 +175,145 @@ export default function App() {
     while (container.firstChild) container.removeChild(container.firstChild);
     container.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1.4));
+    scene.add(new THREE.AmbientLight(0xffffff, 1.3));
     const sunLight = new THREE.DirectionalLight(0xffedd5, 1.2);
     sunLight.position.set(10, 20, 10);
     scene.add(sunLight);
 
+    // Sân cỏ công viên 50m2
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(14, 14),
+      new THREE.PlaneGeometry(24, 24),
       new THREE.MeshBasicMaterial({ color: SAKURA_THEME.groundColor })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.userData = { isFloor: true };
     scene.add(ground);
 
+    // Cây hoa anh đào lớn ở trung tâm
     const centerObj = new THREE.Group();
     const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.5, 1.8, 0.4, 16),
+      new THREE.CylinderGeometry(1.8, 2.2, 0.4, 16),
       new THREE.MeshBasicMaterial({ color: 0x475569 })
     );
     base.position.y = 0.2;
     centerObj.add(base);
 
     const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.25, 2.5, 8),
+      new THREE.CylinderGeometry(0.25, 0.35, 3.2, 8),
       new THREE.MeshBasicMaterial({ color: 0x52271c })
     );
-    trunk.position.y = 1.25;
+    trunk.position.y = 1.6;
     centerObj.add(trunk);
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 8; i++) {
       const sakuraLeaf = new THREE.Mesh(
-        new THREE.SphereGeometry(0.8, 8, 8),
+        new THREE.SphereGeometry(1.1, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0xf472b6 })
       );
-      const angle = (i * Math.PI * 2) / 6;
-      sakuraLeaf.position.set(Math.cos(angle) * 0.5, 2.5 + (i % 2) * 0.3, Math.sin(angle) * 0.5);
+      const angle = (i * Math.PI * 2) / 8;
+      sakuraLeaf.position.set(Math.cos(angle) * 0.8, 3.2 + (i % 2) * 0.4, Math.sin(angle) * 0.8);
       centerObj.add(sakuraLeaf);
     }
     scene.add(centerObj);
 
-    const createHumanMesh = (iconText, colorHex) => {
+    // Thêm các ghế đá công viên xung quanh
+    const createBench = (x, z, rotY) => {
+      const bench = new THREE.Group();
+      bench.position.set(x, 0, z);
+      bench.rotation.y = rotY;
+
+      const seatMat = new THREE.MeshBasicMaterial({ color: 0x64748b });
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.1, 0.6), seatMat);
+      seat.position.y = 0.45;
+      seat.userData = { isBench: true };
+      bench.add(seat);
+
+      const back = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 0.08), seatMat);
+      back.position.set(0, 0.75, -0.26);
+      bench.add(back);
+
+      [[-0.7, 0.22, -0.2], [0.7, 0.22, -0.2], [-0.7, 0.22, 0.2], [0.7, 0.22, 0.2]].forEach(([bx, by, bz]) => {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.45, 8), new THREE.MeshBasicMaterial({ color: 0x1e293b }));
+        leg.position.set(bx, by, bz);
+        bench.add(leg);
+      });
+      scene.add(bench);
+    };
+    createBench(-4, -4, 0.5);
+    createBench(4, 4, -2.5);
+    createBench(-5, 3, 1.2);
+
+    // Hàm tạo mô hình nhân vật CHI TIẾT (ĐẦY ĐỦ THÂN, TAY, CHÂN, ĐẦU, MẮT)
+    const createDetailedHumanMesh = (colorHex, hairHex) => {
       const grp = new THREE.Group();
       const col = parseInt(colorHex.replace('#', '0x'));
+      const hairCol = parseInt(hairHex.replace('#', '0x'));
 
-      const torso = new THREE.Mesh(
-        new THREE.BoxGeometry(0.36, 0.45, 0.22),
-        new THREE.MeshBasicMaterial({ color: col })
-      );
-      torso.position.y = 0.5;
+      const bodyMat = new THREE.MeshBasicMaterial({ color: col });
+      const skinMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+      const pantsMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+      const hairMat = new THREE.MeshBasicMaterial({ color: hairCol });
+      const shoeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+      // Thân người (Áo)
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.5, 0.24), bodyMat);
+      torso.position.y = 0.65;
       grp.add(torso);
 
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.16, 10, 10),
-        new THREE.MeshBasicMaterial({ color: 0xfde047 })
-      );
-      head.position.y = 0.95;
+      // Đầu
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), skinMat);
+      head.position.y = 1.12;
       grp.add(head);
+
+      // Tóc hoạt hình
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(0.19, 10, 10, 0, Math.PI * 2, 0, Math.PI / 2), hairMat);
+      hair.position.y = 1.18;
+      grp.add(hair);
+
+      // Mắt
+      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+      [-0.06, 0.06].forEach((ex) => {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), eyeMat);
+        eye.position.set(ex, 1.14, 0.16);
+        grp.add(eye);
+      });
+
+      // Hai Tay
+      const armGeom = new THREE.CylinderGeometry(0.05, 0.04, 0.4, 8);
+      const leftArm = new THREE.Mesh(armGeom, bodyMat);
+      leftArm.position.set(-0.28, 0.65, 0);
+      leftArm.rotation.z = 0.1;
+      grp.add(leftArm);
+
+      const rightArm = new THREE.Mesh(armGeom, bodyMat);
+      rightArm.position.set(0.28, 0.65, 0);
+      rightArm.rotation.z = -0.1;
+      grp.add(rightArm);
+
+      // Hai Chân
+      const legGeom = new THREE.CylinderGeometry(0.06, 0.05, 0.4, 8);
+      const leftLeg = new THREE.Mesh(legGeom, pantsMat);
+      leftLeg.position.set(-0.11, 0.22, 0);
+      grp.add(leftLeg);
+
+      const rightLeg = new THREE.Mesh(legGeom, pantsMat);
+      rightLeg.position.set(0.11, 0.22, 0);
+      grp.add(rightLeg);
+
+      // Giày
+      const shoeGeom = new THREE.BoxGeometry(0.08, 0.06, 0.14);
+      const leftShoe = new THREE.Mesh(shoeGeom, shoeMat);
+      leftShoe.position.set(-0.11, 0.03, 0.02);
+      grp.add(leftShoe);
+
+      const rightShoe = new THREE.Mesh(shoeGeom, shoeMat);
+      rightShoe.position.set(0.11, 0.03, 0.02);
+      grp.add(rightShoe);
 
       return grp;
     };
 
-    const playerGroup = createHumanMesh(selectedChar.icon, selectedChar.color);
+    const playerGroup = createDetailedHumanMesh(selectedChar.color, selectedChar.hairColor);
     playerGroup.position.set(playerPosRef.current.x, 0, playerPosRef.current.z);
     scene.add(playerGroup);
     playerGroupRef.current = playerGroup;
@@ -256,9 +329,10 @@ export default function App() {
       const intersects = raycaster.intersectObjects(scene.children, true);
 
       for (let i = 0; i < intersects.length; i++) {
-        if (intersects[i].object.userData?.isFloor) {
-          playerPosRef.current.targetX = Math.max(-5.5, Math.min(5.5, intersects[i].point.x));
-          playerPosRef.current.targetZ = Math.max(-5.5, Math.min(5.5, intersects[i].point.z));
+        if (intersects[i].object.userData?.isFloor || intersects[i].object.userData?.isBench) {
+          const pt = intersects[i].point;
+          playerPosRef.current.targetX = Math.max(-9, Math.min(9, pt.x));
+          playerPosRef.current.targetZ = Math.max(-9, Math.min(9, pt.z));
           break;
         }
       }
@@ -279,7 +353,7 @@ export default function App() {
       onlinePlayers.forEach((p) => {
         let rMesh = remoteGroups[p.uid];
         if (!rMesh) {
-          rMesh = createHumanMesh(p.icon || '🐱', p.color || '#3b82f6');
+          rMesh = createDetailedHumanMesh(p.color || '#3b82f6', p.hairColor || '#1e293b');
           scene.add(rMesh);
           remoteGroups[p.uid] = rMesh;
         }
