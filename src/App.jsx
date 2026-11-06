@@ -56,7 +56,7 @@ export default function App() {
   const [targetPlayer, setTargetPlayer] = useState(null);
   const [uiToast, setUiToast] = useState(null);
 
-  // Hiệu ứng trạng thái cá nhân (choáng, té xỉu, tặng hoa, tặng kẹo)
+  // Trạng thái hiệu ứng cá nhân và ngồi ghế
   const [myEffect, setMyEffect] = useState(null);
   const [isSitting, setIsSitting] = useState(false);
 
@@ -93,7 +93,7 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Sync Firebase: Người chơi online, hiệu ứng chọc ghẹo đích danh & bong bóng chat
+  // Đồng bộ Firebase Realtime: Vị trí người chơi, chat và hiệu ứng chọc ghẹo đích danh
   useEffect(() => {
     if (!db || !user || !hasEnteredGame) return;
 
@@ -103,7 +103,6 @@ export default function App() {
       const active = [];
       snapshot.forEach((docSnap) => {
         const p = docSnap.data();
-        // Nếu nhận được hiệu ứng nhắm vào chính mình
         if (p.uid === user.uid && p.actionEffect && (now - (p.actionTime?.seconds || 0) < 5)) {
           triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
         }
@@ -129,7 +128,6 @@ export default function App() {
       });
     });
 
-    // Phát sóng vị trí bản thân định kỳ
     const heartbeat = setInterval(() => {
       if (user && playerPosRef.current) {
         try {
@@ -155,7 +153,7 @@ export default function App() {
     };
   }, [user, hasEnteredGame, customName, selectedChar, isSitting]);
 
-  // Dọn dẹp bong bóng chat cũ sau 5 giây
+  // Tự động xóa bong bóng chat sau 5 giây
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -178,7 +176,6 @@ export default function App() {
     setTimeout(() => setMyEffect(null), 3500);
   };
 
-  // Gửi hành động chọc ghẹo đến MỘT NGƯỜI CHƠI CỤ THỂ qua Firebase
   const sendActionToPlayer = async (targetUid, type, label) => {
     if (!db || !targetUid) return;
     setTargetPlayer(null);
@@ -192,7 +189,8 @@ export default function App() {
       }, { merge: true });
     } catch (e) {}
   };
-  // --- 3D Scene Setup với Nhân vật đầy đủ tay chân và cảnh quan ghế đá ---
+
+  // --- 3D Scene Setup ---
   useEffect(() => {
     if (!threeLoaded || !hasEnteredGame || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -202,7 +200,6 @@ export default function App() {
     scene.background = new THREE.Color(SAKURA_THEME.skyColor);
 
     const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 1000);
-    // Cân chỉnh lại vị trí camera và điểm nhìn để căn giữa hoàn toàn khung hình
     camera.position.set(0, 11, 16);
     camera.lookAt(0, 0, 0);
 
@@ -218,7 +215,7 @@ export default function App() {
     sunLight.position.set(15, 25, 15);
     scene.add(sunLight);
 
-    // Sân cỏ công viên 50m2
+    // Sân cỏ công viên
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(26, 26),
       new THREE.MeshBasicMaterial({ color: SAKURA_THEME.groundColor })
@@ -227,7 +224,7 @@ export default function App() {
     ground.userData = { isFloor: true };
     scene.add(ground);
 
-    // Cây hoa anh đào lớn ở trung tâm
+    // Cây hoa anh đào tâm điểm
     const centerObj = new THREE.Group();
     const base = new THREE.Mesh(
       new THREE.CylinderGeometry(1.8, 2.2, 0.4, 16),
@@ -254,8 +251,7 @@ export default function App() {
     }
     scene.add(centerObj);
 
-    // Ghế đá công viên có lưu tọa độ để nhân vật bước tới ngồi
-    const benches = [];
+    // Ghế đá công viên hỗ trợ tương tác ngồi
     const createBench = (x, z, rotY) => {
       const bench = new THREE.Group();
       bench.position.set(x, 0, z);
@@ -277,14 +273,13 @@ export default function App() {
         bench.add(leg);
       });
       scene.add(bench);
-      benches.push({ x, z, seat });
     };
     createBench(-5, -4, 0.5);
     createBench(5, 4, -2.5);
     createBench(-5, 4, 1.2);
     createBench(5, -4, -0.5);
 
-    // Hàm tạo mô hình nhân vật CHI TIẾT
+    // Mô hình nhân vật 3D đầy đủ tay chân
     const createDetailedHumanMesh = (colorHex, hairHex) => {
       const grp = new THREE.Group();
       const col = parseInt(colorHex.replace('#', '0x'));
@@ -363,7 +358,6 @@ export default function App() {
       for (let i = 0; i < intersects.length; i++) {
         const obj = intersects[i].object;
 
-        // Click vào ghế đá -> Ngồi ghế
         if (obj.userData?.isBench) {
           setIsSitting(true);
           playerPosRef.current.targetX = obj.userData.benchPos.x;
@@ -371,7 +365,6 @@ export default function App() {
           return;
         }
 
-        // Click xuống sàn cỏ -> Đi dạo
         if (obj.userData?.isFloor) {
           setIsSitting(false);
           const pt = intersects[i].point;
@@ -387,13 +380,11 @@ export default function App() {
     const animate = () => {
       animId = requestAnimationFrame(animate);
 
-      // Di chuyển mượt nhân vật chính
       const curr = playerPosRef.current;
       curr.x += (curr.targetX - curr.x) * 0.12;
       curr.z += (curr.targetZ - curr.z) * 0.12;
       playerGroup.position.set(curr.x, isSitting ? 0.25 : 0, curr.z);
 
-      // Đồng bộ & Render người chơi online khác
       const remoteMap = remoteGroupsRef.current;
       const activeUids = new Set(onlinePlayers.map((p) => p.uid));
 
@@ -415,7 +406,6 @@ export default function App() {
         rMesh.position.set(p.x || 0, p.isSitting ? 0.25 : 0, p.z || 0);
       });
 
-      // Chiếu tọa độ 3D sang màn hình 2D để hiển thị bong bóng chat chuẩn xác trên đầu từng người
       const newScreenPos = {};
       const allPeople = [{ uid: user?.uid, name: customName, x: curr.x, z: curr.z }, ...onlinePlayers];
 
@@ -555,10 +545,10 @@ export default function App() {
       </header>
 
       {/* Main 3D Viewport */}
-      <div className="flex-1 relative overflow-hidden flex flex-col">
+      <div className="flex-1 relative overflow-hidden flex flex-col w-full">
         <div ref={canvasContainerRef} className="w-full flex-1 cursor-grab active:cursor-grabbing relative" />
 
-        {/* Bong bóng chat 3D bám đúng đầu từng người chơi trong 5 giây */}
+        {/* Bong bóng chat 3D bám đúng đầu từng người chơi */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-30">
           {speechBubbles.map((bubble) => {
             const pos = screenPositionsRef.current[bubble.uid];
@@ -578,7 +568,7 @@ export default function App() {
           })}
         </div>
 
-        {/* Hiệu ứng trạng thái cá nhân khi bị chọc ghẹo */}
+        {/* Hiệu ứng trạng thái cá nhân */}
         {myEffect && (
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 animate-bounce text-center">
             <div className="px-6 py-4 rounded-3xl bg-slate-900/95 border-2 border-pink-500 shadow-2xl text-white space-y-1">
@@ -619,7 +609,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Modal Chọn Hành Động Chọc Ghẹo Khi Bấm Vào Người Chơi */}
+        {/* Modal Chọn Hành Động Chọc Ghẹo */}
         {targetPlayer && (
           <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
             <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
