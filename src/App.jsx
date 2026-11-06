@@ -22,7 +22,7 @@ import {
   Move, Package, Sparkles
 } from 'lucide-react';
 
-// --- Firebase Config ---
+// --- Firebase Initialization ---
 const firebaseConfig = {
   apiKey: "AIzaSyBzBLcsQIg8reDq6tpvs9FnLgSaxicOfY0",
   authDomain: "my-3d-office-game.firebaseapp.com",
@@ -38,7 +38,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- Sound Synthesizer ---
+// --- Web Audio Synthesizer ---
 class WorkplaceSoundSystem {
   constructor() { this.ctx = null; }
   init() {
@@ -99,28 +99,31 @@ class WorkplaceSoundSystem {
 }
 const sfx = new WorkplaceSoundSystem();
 
-// --- Item Catalog ---
+// --- Item Decor Inventory ---
 const DECOR_INVENTORY = {
   tech: [
     { type: 'laptop', name: 'Laptop Gaming', icon: '💻', color: '#1e293b' },
-    { type: 'dual_monitors', name: 'Màn hình Kép', icon: '🖥️', color: '#0f172a' },
-    { type: 'keyboard', name: 'Bàn phím cơ', icon: '⌨️', color: '#3b82f6' }
+    { type: 'dual_monitors', name: 'Màn hình Kép 4K', icon: '🖥️', color: '#0f172a' },
+    { type: 'keyboard', name: 'Bàn phím cơ RGB', icon: '⌨️', color: '#3b82f6' }
   ],
   plants: [
     { type: 'succulent', name: 'Chậu Sen Đá', icon: '🪴', color: '#10b981' },
-    { type: 'monstera', name: 'Cây Trầu Bà', icon: '🌿', color: '#059669' }
+    { type: 'monstera', name: 'Cây Trầu Bà', icon: '🌿', color: '#059669' },
+    { type: 'bonsai', name: 'Cây Bonsai', icon: '🌳', color: '#047857' }
   ],
   personal: [
     { type: 'teddy_bear', name: 'Gấu Bông', icon: '🧸', color: '#d97706' },
     { type: 'coffee_mug', name: 'Ly Cà Phê', icon: '☕', color: '#f97316' },
-    { type: 'rubber_duck', name: 'Vịt Cao Su', icon: '🦆', color: '#eab308' }
+    { type: 'rubber_duck', name: 'Vịt Cao Su Debug', icon: '🦆', color: '#eab308' },
+    { type: 'desk_lamp', name: 'Đèn Bàn LED', icon: '💡', color: '#f59e0b' }
   ]
 };
 
 const DEFAULT_DESK_ITEMS = {
   1: [
     { id: 'item-1', type: 'dual_monitors', x: 0, z: -0.1, rotY: 0, scale: 1, color: '#0f172a' },
-    { id: 'item-2', type: 'coffee_mug', x: -0.6, z: 0.2, rotY: 0, scale: 0.7, color: '#f97316' }
+    { id: 'item-2', type: 'coffee_mug', x: -0.6, z: 0.2, rotY: 0, scale: 0.7, color: '#f97316' },
+    { id: 'item-3', type: 'teddy_bear', x: 0.6, z: -0.2, rotY: -0.4, scale: 0.9, color: '#d97706' }
   ],
   2: [
     { id: 'item-21', type: 'laptop', x: 0, z: 0, rotY: 0, scale: 1, color: '#1e293b' },
@@ -151,6 +154,65 @@ const INITIAL_TEAMMATES = Array.from({ length: 15 }, (_, i) => ({
   skinColor: "#fde047"
 }));
 
+// Tạo Texture Bong Bóng Chat 3D
+function createSpeechBubbleTexture(text, senderName) {
+  const THREE = window.THREE;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  // Khung viền Bong bóng
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+  ctx.strokeStyle = '#3b82f6';
+  ctx.lineWidth = 6;
+
+  if (ctx.roundRect) {
+    ctx.roundRect(16, 16, 480, 170, 24);
+  } else {
+    ctx.fillRect(16, 16, 480, 170);
+  }
+  ctx.fill();
+  ctx.stroke();
+
+  // Mũi tên chỉ xuống đầu nhân vật
+  ctx.beginPath();
+  ctx.moveTo(240, 186);
+  ctx.lineTo(256, 220);
+  ctx.lineTo(272, 186);
+  ctx.closePath();
+  ctx.fillStyle = '#3b82f6';
+  ctx.fill();
+
+  // Tên người gửi
+  ctx.fillStyle = '#60a5fa';
+  ctx.font = 'bold 24px Inter, sans-serif';
+  ctx.fillText(senderName, 36, 52);
+
+  // Nội dung tin nhắn (xuống dòng tự động)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 26px Inter, sans-serif';
+  
+  const words = text.split(' ');
+  let line = '';
+  let y = 92;
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' ';
+    const metrics = ctx.measureText(testLine);
+    if (metrics.width > 420 && n > 0) {
+      ctx.fillText(line, 36, y);
+      line = words[n] + ' ';
+      y += 36;
+      if (y > 165) break;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, 36, y);
+
+  return new THREE.CanvasTexture(canvas);
+}
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [hasOnboarded, setHasOnboarded] = useState(false);
@@ -172,6 +234,7 @@ export default function App() {
   const [activeTargetTeammate, setActiveTargetTeammate] = useState(null);
   const [activeRightTab, setActiveRightTab] = useState('chat');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const [deskLayoutPositions, setDeskLayoutPositions] = useState(() => {
     const pos = {};
@@ -180,15 +243,15 @@ export default function App() {
   });
 
   const [chatMessages, setChatMessages] = useState([
-    { id: 'm1', senderId: 2, senderName: 'Hệ thống 3D', text: 'Chào mừng bạn đến với văn phòng 3D!', time: '10:00 AM' }
+    { id: 'm1', senderId: 2, senderName: 'Hệ thống 3D', text: 'Chào mừng các bạn đến với Văn phòng 3D!', time: '10:00 AM', timestamp: { seconds: Date.now() / 1000 } }
   ]);
   const [inputMessage, setInputMessage] = useState('');
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [threeLoaded, setThreeLoaded] = useState(false);
 
   const canvasContainerRef = useRef(null);
   const playerPosRef = useRef({ x: -3.5 * 2.55, z: 3.2, targetX: -3.5 * 2.55, targetZ: 3.2 });
   const desk3DMeshMapRef = useRef({});
+  const activeBubblesRef = useRef({}); // Lưu trữ Bong bóng chat 3D đang hiển thị
 
   const deskLayoutPositionsRef = useRef(deskLayoutPositions);
   deskLayoutPositionsRef.current = deskLayoutPositions;
@@ -199,7 +262,13 @@ export default function App() {
   const isLayoutModeRef = useRef(isLayoutMode);
   isLayoutModeRef.current = isLayoutMode;
 
-  // Khôi phục Onboarding
+  const selectedDeskIdRef = useRef(selectedDeskId);
+  selectedDeskIdRef.current = selectedDeskId;
+
+  const chatMessagesRef = useRef(chatMessages);
+  chatMessagesRef.current = chatMessages;
+
+  // 1. Tải Onboarding đã lưu
   useEffect(() => {
     const saved = localStorage.getItem('user_3d_avatar');
     if (saved) {
@@ -210,7 +279,7 @@ export default function App() {
     }
   }, []);
 
-  // Tải thư viện Three.js
+  // 2. Nạp thư viện Three.js
   useEffect(() => {
     if (window.THREE) { setThreeLoaded(true); return; }
     const script = document.createElement('script');
@@ -220,7 +289,7 @@ export default function App() {
     document.head.appendChild(script);
   }, []);
 
-  // Kết nối Firebase Auth
+  // 3. Đăng nhập Firebase
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -236,7 +305,7 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Đồng bộ Firebase Realtime
+  // 4. Đồng bộ vị trí Bàn & Người chơi & Tin nhắn Chat từ Firestore
   useEffect(() => {
     if (!db || !user) return;
 
@@ -270,6 +339,16 @@ export default function App() {
       }
     });
 
+    const chatCol = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
+    const unsubChat = onSnapshot(chatCol, (snapshot) => {
+      const msgs = [];
+      snapshot.forEach((docSnap) => msgs.push({ id: docSnap.id, ...docSnap.data() }));
+      if (msgs.length > 0) {
+        msgs.sort((a, b) => (a.createdAt || a.timestamp?.seconds || 0) - (b.createdAt || b.timestamp?.seconds || 0));
+        setChatMessages(msgs);
+      }
+    });
+
     const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
     const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
       const now = Date.now() / 1000;
@@ -285,11 +364,12 @@ export default function App() {
 
     return () => {
       unsubDesks();
+      unsubChat();
       unsubPlayers();
     };
   }, [user]);
 
-  // Gán bàn thực tế
+  // Gán bàn thực tế cho người chơi online & tự động bỏ NPC trùng
   const teammates = useMemo(() => {
     const list = [...INITIAL_TEAMMATES];
     list[0] = {
@@ -320,7 +400,7 @@ export default function App() {
   const onlinePlayersRef = useRef(onlinePlayers);
   onlinePlayersRef.current = onlinePlayers;
 
-  // 3D Canvas Engine
+  // 5. Khởi tạo 3D Canvas Engine
   useEffect(() => {
     if (!threeLoaded || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -345,6 +425,7 @@ export default function App() {
     sunLight.position.set(-20, 30, 22);
     scene.add(sunLight);
 
+    // Floor
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(44, 30),
       new THREE.MeshStandardMaterial({ color: 0x241d17, roughness: 0.4 })
@@ -353,11 +434,33 @@ export default function App() {
     floor.userData = { isFloorPlane: true };
     scene.add(floor);
 
+    // Wall
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(44, 11, 0.4), wallMat);
     backWall.position.set(0, 5.5, -14);
     scene.add(backWall);
 
+    // Signboard
+    const signCanvas = document.createElement('canvas');
+    signCanvas.width = 1024;
+    signCanvas.height = 256;
+    const sCtx = signCanvas.getContext('2d');
+    sCtx.fillStyle = '#0f172a';
+    sCtx.fillRect(0, 0, 1024, 256);
+    sCtx.strokeStyle = '#d4a373';
+    sCtx.lineWidth = 12;
+    sCtx.strokeRect(16, 16, 992, 224);
+    sCtx.fillStyle = '#fef08a';
+    sCtx.font = 'bold 44px Georgia, serif';
+    sCtx.textAlign = 'center';
+    sCtx.textBaseline = 'middle';
+    sCtx.fillText(`🏛️ ${officeName.toUpperCase()}`, 512, 128);
+    const signTexture = new THREE.CanvasTexture(signCanvas);
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({ map: signTexture, transparent: true }));
+    signMesh.position.set(0, 4.8, -13.68);
+    scene.add(signMesh);
+
+    // Plants
     const createPlantMesh = (x, z) => {
       const pGroup = new THREE.Group();
       pGroup.position.set(x, 0, z);
@@ -399,16 +502,17 @@ export default function App() {
         group.position.set(0, 0, 0.75);
         group.position.y = 0.15;
       }
-      group.userData = { teammateId: tm.id || tm.uid, isAvatarObject: true };
+      group.userData = { teammateId: tm.id || tm.uid, isAvatarObject: true, name: tm.name };
       return group;
     }
 
+    // Render 15 Desks & Nametags
     teammatesRef.current.forEach((tm) => {
       const pos = deskLayoutPositionsRef.current[tm.id] || getDefaultDesk3DPosition(tm.id);
       const deskGroup = new THREE.Group();
       deskGroup.position.set(pos.x, 0, pos.z);
       deskGroup.rotation.y = pos.rotY;
-      deskGroup.userData = { deskId: tm.id, isDeskUnit: true };
+      deskGroup.userData = { deskId: tm.id, isDeskUnit: true, name: tm.name };
       desk3DMeshMapRef.current[tm.id] = deskGroup;
 
       const table = new THREE.Mesh(
@@ -423,6 +527,31 @@ export default function App() {
       chair.userData = { isChair: true, deskId: tm.id };
       deskGroup.add(chair);
 
+      // Render Nametag Sprite
+      const bubbleCanvas = document.createElement('canvas');
+      bubbleCanvas.width = 280;
+      bubbleCanvas.height = 120;
+      const bCtx = bubbleCanvas.getContext('2d');
+      bCtx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+      if (bCtx.roundRect) bCtx.roundRect(10, 10, 260, 100, 16); else bCtx.fillRect(10, 10, 260, 100);
+      bCtx.fill();
+      bCtx.lineWidth = 4;
+      bCtx.strokeStyle = tm.color || '#3b82f6';
+      bCtx.stroke();
+      bCtx.fillStyle = '#ffffff';
+      bCtx.font = 'bold 24px Inter, sans-serif';
+      bCtx.textAlign = 'center';
+      bCtx.fillText(`${tm.emotion || '💻'} Bàn #${tm.id}`, 140, 50);
+      bCtx.font = '20px Inter, sans-serif';
+      bCtx.fillStyle = '#60a5fa';
+      bCtx.fillText(tm.name, 140, 85);
+
+      const bubbleTexture = new THREE.CanvasTexture(bubbleCanvas);
+      const bubbleSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture, transparent: true }));
+      bubbleSprite.scale.set(1.9, 0.9, 1);
+      bubbleSprite.position.set(0, 2.35, 0);
+      deskGroup.add(bubbleSprite);
+
       if (!tm.isUser && !tm.isRealPlayer) {
         const npcMesh = createHumanMesh(tm, false);
         deskGroup.add(npcMesh);
@@ -431,6 +560,7 @@ export default function App() {
       desksGroup.add(deskGroup);
     });
 
+    // Player Mesh
     const playerGroup = new THREE.Group();
     playerGroup.position.set(playerPosRef.current.x, 0, playerPosRef.current.z);
     const playerMesh = createHumanMesh(teammatesRef.current[0], true);
@@ -553,11 +683,13 @@ export default function App() {
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
 
-    let animId;
-    const animate = () => {
-      // ĐÃ SỬA LỖI: Gọi tên hàm animate thay vì biến animId
-      animId = requestAnimationFrame(animate);
+    const remoteMeshMap = {};
 
+    let animationFrameId;
+    const animate = () => {
+      animationFrameId = requestAnimationFrame(animate);
+
+      const nowSec = Date.now() / 1000;
       const curr = playerPosRef.current;
       curr.x += (curr.targetX - curr.x) * 0.12;
       curr.z += (curr.targetZ - curr.z) * 0.12;
@@ -577,15 +709,69 @@ export default function App() {
         } catch (e) {}
       }
 
-      const remoteMeshMap = {};
       onlinePlayersRef.current.forEach((rp) => {
         let rMesh = remoteMeshMap[rp.uid];
         if (!rMesh) {
-          rMesh = createHumanMesh({ id: rp.uid, color: rp.color || '#ec4899' }, true);
+          rMesh = createHumanMesh({ id: rp.uid, name: rp.name, color: rp.color || '#ec4899' }, true);
           remotePlayersGroup.add(rMesh);
           remoteMeshMap[rp.uid] = rMesh;
         }
         rMesh.position.set(rp.x || 0, 0, rp.z || 0);
+      });
+
+      // --- CẬP NHẬT / HIỂN THỊ BONG BÓNG CHAT 3D NỔI TRÊN ĐẦU ---
+      const recentMsgs = chatMessagesRef.current;
+      const latestSenderMsgs = {};
+      recentMsgs.forEach((m) => {
+        const mTime = m.createdAt || m.timestamp?.seconds || (Date.now() / 1000);
+        if (nowSec - mTime < 6) { // Bong bóng hiển thị trong 6 giây
+          latestSenderMsgs[m.senderName] = m;
+        }
+      });
+
+      // Xóa các bong bóng hết hạn
+      Object.keys(activeBubblesRef.current).forEach((senderKey) => {
+        if (!latestSenderMsgs[senderKey]) {
+          const bubbleObj = activeBubblesRef.current[senderKey];
+          if (bubbleObj && bubbleObj.parent) {
+            bubbleObj.parent.remove(bubbleObj);
+          }
+          delete activeBubblesRef.current[senderKey];
+        }
+      });
+
+      // Tạo/gán bong bóng thoại 3D lên đầu nhân vật
+      Object.entries(latestSenderMsgs).forEach(([senderName, msg]) => {
+        let targetMesh = null;
+        if (senderName === characterConfig.name) {
+          targetMesh = playerGroup;
+        } else {
+          // Tìm trong danh sách online
+          const foundOnline = onlinePlayersRef.current.find((p) => p.name === senderName);
+          if (foundOnline && remoteMeshMap[foundOnline.uid]) {
+            targetMesh = remoteMeshMap[foundOnline.uid];
+          } else {
+            // Tìm bàn được gán tên người chơi
+            const foundTeammate = teammatesRef.current.find((t) => t.name === senderName);
+            if (foundTeammate && desk3DMeshMapRef.current[foundTeammate.id]) {
+              targetMesh = desk3DMeshMapRef.current[foundTeammate.id];
+            }
+          }
+        }
+
+        if (targetMesh) {
+          let bubbleSprite = activeBubblesRef.current[senderName];
+          if (!bubbleSprite || bubbleSprite.userData?.text !== msg.text) {
+            if (bubbleSprite && bubbleSprite.parent) bubbleSprite.parent.remove(bubbleSprite);
+            const texture = createSpeechBubbleTexture(msg.text, senderName);
+            bubbleSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+            bubbleSprite.scale.set(3.2, 1.6, 1);
+            bubbleSprite.position.set(0, targetMesh.userData?.isDeskUnit ? 3.3 : 2.1, 0);
+            bubbleSprite.userData = { text: msg.text };
+            targetMesh.add(bubbleSprite);
+            activeBubblesRef.current[senderName] = bubbleSprite;
+          }
+        }
       });
 
       camera.position.set(
@@ -599,7 +785,7 @@ export default function App() {
     animate();
 
     return () => {
-      cancelAnimationFrame(animId);
+      cancelAnimationFrame(animationFrameId);
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
@@ -617,12 +803,27 @@ export default function App() {
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!inputMessage.trim()) return;
-    setChatMessages((prev) => [
-      ...prev,
-      { id: `m-${Date.now()}`, senderName: characterConfig.name, text: inputMessage.trim(), time: 'Vừa xong' }
-    ]);
+
+    const currentSec = Date.now() / 1000;
+    const newMsg = {
+      id: `msg-${Date.now()}`,
+      senderId: user ? user.uid : 'local',
+      senderName: characterConfig.name,
+      text: inputMessage.trim(),
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: currentSec
+    };
+
+    setChatMessages((prev) => [...prev, newMsg]);
     setInputMessage('');
     sfx.play('pop');
+
+    if (db) {
+      try {
+        const chatCol = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
+        setDoc(doc(chatCol, newMsg.id), { ...newMsg, timestamp: serverTimestamp() });
+      } catch (err) {}
+    }
   };
 
   return (
@@ -632,34 +833,47 @@ export default function App() {
       {!hasOnboarded && (
         <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
-            <h1 className="text-2xl font-bold text-white text-center">Tạo Nhân Vật Văn Phòng 3D</h1>
+            <div className="text-center space-y-2">
+              <div className="inline-flex p-3 bg-blue-600/20 text-blue-400 rounded-2xl border border-blue-500/30 mb-1">
+                <Building2 className="w-8 h-8" />
+              </div>
+              <h1 className="text-2xl font-bold text-white">Tạo Nhân Vật Văn Phòng 3D</h1>
+              <p className="text-xs text-slate-400">Tùy chỉnh diện mạo & sở hữu Bàn làm việc riêng trong 3D</p>
+            </div>
+
             <form onSubmit={handleCompleteOnboarding} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Tên hiển thị:</label>
+                <label className="block text-slate-300 mb-1 font-semibold">Tên hiển thị nhân vật:</label>
                 <input
                   type="text"
                   required
+                  placeholder="Nhập tên của bạn..."
                   value={characterConfig.name}
                   onChange={(e) => setCharacterConfig({ ...characterConfig, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-medium"
+                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white font-medium text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
+
               <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Màu áo 3D:</label>
-                <div className="flex gap-3">
+                <label className="block text-slate-300 mb-1 font-semibold">Màu áo hiển thị 3D:</label>
+                <div className="flex items-center gap-3">
                   {['#3b82f6', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'].map((c) => (
                     <button
                       type="button"
                       key={c}
                       onClick={() => setCharacterConfig({ ...characterConfig, color: c })}
-                      className={`w-9 h-9 rounded-full border-2 ${characterConfig.color === c ? 'border-white scale-110' : 'border-transparent'}`}
+                      className={`w-9 h-9 rounded-full border-2 transition ${characterConfig.color === c ? 'border-white scale-110 shadow-lg' : 'border-transparent'}`}
                       style={{ backgroundColor: c }}
                     />
                   ))}
                 </div>
               </div>
-              <button type="submit" className="w-full py-3.5 bg-blue-600 text-white font-bold rounded-2xl">
-                Vào Văn Phòng ngay
+
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-2xl transition shadow-xl shadow-blue-600/40 mt-4 flex items-center justify-center gap-2"
+              >
+                <Check className="w-5 h-5" /> Bước Vào Văn Phòng 3D Ngay
               </button>
             </form>
           </div>
@@ -667,71 +881,127 @@ export default function App() {
       )}
 
       {/* Header Bar */}
-      <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90">
+      <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0">
         <div className="flex items-center gap-3">
-          <Building2 className="w-6 h-6 text-blue-500" />
-          <h1 className="font-bold text-amber-400 font-serif text-base">🏛️ {officeName}</h1>
+          <div className="p-2 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-500/30">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="font-bold text-amber-400 font-serif text-base leading-tight">🏛️ {officeName}</h1>
+            <p className="text-[11px] text-slate-400">Bong bóng Chat 3D hiển thị thời gian thực nổi trên đầu avatar</p>
+          </div>
         </div>
+
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsLayoutMode(!isLayoutMode)}
             className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition ${
-              isLayoutMode ? 'bg-amber-600 border-amber-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-300'
+              isLayoutMode ? 'bg-amber-600 border-amber-400 text-white shadow-lg' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
             }`}
           >
-            <Move className="w-3.5 h-3.5" /> {isLayoutMode ? 'Đang Sắp Xếp Bàn (Kéo chuột 3D)' : '🛠️ Sắp Xếp Bàn'}
+            <Move className="w-3.5 h-3.5" /> {isLayoutMode ? 'Đang Sắp Xếp Bàn (Kéo 3D)' : '🛠️ Sắp Xếp Bàn'}
           </button>
-          <button onClick={() => setIsEditingProfile(true)} className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-semibold">
-            {characterConfig.name}
+          <button
+            onClick={() => { setIsEditingProfile(true); sfx.play('click'); }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl transition text-xs font-semibold"
+          >
+            <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] text-white font-bold" style={{ backgroundColor: characterConfig.color }}>
+              {characterConfig.name.substring(0, 1).toUpperCase()}
+            </div>
+            <span>{characterConfig.name}</span>
+          </button>
+          <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 bg-slate-800 border border-slate-700 rounded-xl">
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
           </button>
         </div>
       </header>
 
-      {/* Main Viewport */}
-      <div className="flex-1 flex relative overflow-hidden">
-        <div className="flex-1 relative bg-slate-950">
-          <div ref={canvasContainerRef} className="w-full h-full cursor-grab" />
-          <div className="absolute top-4 left-6 bg-slate-900/85 backdrop-blur border border-slate-800 px-4 py-2 rounded-2xl text-xs text-slate-300">
-            🟢 Live: {onlinePlayers.length + 1} người chơi online
+      {/* Main Viewport Container */}
+      <div className="flex-1 flex overflow-hidden relative">
+        <div className="flex-1 relative bg-slate-950 overflow-hidden">
+          <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing relative" />
+
+          {/* Controls HUD */}
+          <div className="absolute top-4 left-6 bg-slate-900/85 backdrop-blur border border-slate-800 px-4 py-2.5 rounded-2xl text-xs flex items-center gap-4 shadow-xl z-20 text-slate-300">
+            <div className="flex items-center gap-1.5 font-medium">
+              <span className="px-1.5 py-0.5 rounded bg-blue-600 text-white font-bold">L-Click</span> Di chuyển / Tương tác
+            </div>
+            <div className="h-4 w-[1px] bg-slate-700" />
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
+              🟢 Live: {onlinePlayers.length + 1} người chơi online
+            </div>
+          </div>
+
+          {/* Quick Desk Navigation */}
+          <div className="absolute bottom-6 left-6 right-84 flex items-center gap-2 overflow-x-auto p-2 bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-2xl z-10 shadow-2xl">
+            <span className="text-xs font-semibold px-3 text-slate-400 uppercase tracking-wider">
+              Bàn:
+            </span>
+            {teammates.map((tm) => (
+              <button
+                key={tm.id}
+                onClick={() => { sfx.play('click'); setSelectedDeskId(tm.id); }}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition border ${
+                  selectedDeskId === tm.id
+                    ? 'bg-blue-600 border-blue-400 text-white shadow-lg'
+                    : 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/80'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tm.color }} />
+                #{tm.id} {tm.name}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Right Panel */}
-        <div className="w-80 border-l border-slate-800 bg-slate-900 flex flex-col z-10">
+        {/* Right Community & Chat Panel */}
+        <div className="w-80 border-l border-slate-800 bg-slate-900 flex flex-col z-10 shadow-lg shrink-0">
           <div className="flex border-b border-slate-800">
             <button
               onClick={() => setActiveRightTab('chat')}
-              className={`flex-1 py-3 text-xs font-semibold ${activeRightTab === 'chat' ? 'text-blue-400 border-b-2 border-blue-500' : 'text-slate-400'}`}
+              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition ${
+                activeRightTab === 'chat' ? 'border-blue-500 text-blue-400 bg-slate-800/40' : 'border-transparent text-slate-400'
+              }`}
             >
-              Trò chuyện Live
+              <MessageSquare className="w-4 h-4" /> Trò chuyện Live
             </button>
             <button
               onClick={() => setActiveRightTab('decor')}
-              className={`flex-1 py-3 text-xs font-semibold ${activeRightTab === 'decor' ? 'text-blue-400 border-b-2 border-blue-500' : 'text-slate-400'}`}
+              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition ${
+                activeRightTab === 'decor' ? 'border-blue-500 text-blue-400 bg-slate-800/40' : 'border-transparent text-slate-400'
+              }`}
             >
-              Trang trí Bàn (#{selectedDeskId || 1})
+              <Package className="w-4 h-4" /> Trang trí Bàn (#{selectedDeskId || 1})
             </button>
           </div>
 
           {activeRightTab === 'chat' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden">
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {chatMessages.map((m) => (
-                  <div key={m.id} className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs">
-                    <div className="font-bold text-blue-400">{m.senderName}</div>
-                    <div>{m.text}</div>
+                {chatMessages.map((msg) => (
+                  <div key={msg.id} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-blue-400">{msg.senderName}</span>
+                      <span className="text-slate-500">{msg.time}</span>
+                    </div>
+                    <div className="p-2.5 rounded-xl text-xs bg-slate-800 border border-slate-700">
+                      {msg.text}
+                    </div>
                   </div>
                 ))}
               </div>
+
               <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 flex gap-2">
                 <input
                   type="text"
-                  placeholder="Nhắn tin..."
+                  placeholder="Nhắn tin (Hiện bong bóng 3D)..."
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
-                  className="flex-1 px-3 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700"
+                  className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-700 bg-slate-800 text-white focus:outline-none focus:border-blue-500"
                 />
-                <button type="submit" className="p-2 bg-blue-600 rounded-xl"><Send className="w-4 h-4" /></button>
+                <button type="submit" className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition">
+                  <Send className="w-4 h-4" />
+                </button>
               </form>
             </div>
           )}
@@ -757,7 +1027,7 @@ export default function App() {
                           }
                           sfx.play('pop');
                         }}
-                        className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 flex flex-col items-center gap-1"
+                        className="p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 flex flex-col items-center gap-1 transition"
                       >
                         <span className="text-xl">{it.icon}</span>
                         <span className="font-semibold text-[11px]">{it.name}</span>
@@ -774,7 +1044,7 @@ export default function App() {
       {/* Action Popup Modal khi chọn Nhân vật */}
       {activeTargetTeammate && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
+          <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-white">{activeTargetTeammate.name}</h3>
               <button onClick={() => setActiveTargetTeammate(null)}><X className="w-4 h-4 text-slate-400" /></button>
@@ -782,15 +1052,68 @@ export default function App() {
             <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
               <button
                 onClick={() => { sfx.play('throw'); alert(`Bạn đã ném giấy vào ${activeTargetTeammate.name}! 📄`); setActiveTargetTeammate(null); }}
-                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400"
+                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-400 transition"
               >
                 📄 Ném Cục Giấy
               </button>
               <button
                 onClick={() => { sfx.play('trip'); alert(`Bạn đã gạt chân ${activeTargetTeammate.name}! 🦶`); setActiveTargetTeammate(null); }}
-                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400"
+                className="p-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-rose-400 transition"
               >
                 🦶 Gạt Chân Té
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {isEditingProfile && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md p-6 rounded-3xl bg-slate-900 border border-slate-800 text-white shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <User className="w-5 h-5 text-blue-500" /> Cập Nhật Thông Tin Nhân Vật
+              </h3>
+              <button onClick={() => setIsEditingProfile(false)} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">Tên hiển thị:</label>
+                <input
+                  type="text"
+                  value={characterConfig.name}
+                  onChange={(e) => {
+                    const nextCfg = { ...characterConfig, name: e.target.value };
+                    setCharacterConfig(nextCfg);
+                    localStorage.setItem('user_3d_avatar', JSON.stringify(nextCfg));
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-400 mb-1">Màu áo:</label>
+                <div className="flex items-center gap-2">
+                  {['#3b82f6', '#ec4899', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'].map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => {
+                        const nextCfg = { ...characterConfig, color: c };
+                        setCharacterConfig(nextCfg);
+                        localStorage.setItem('user_3d_avatar', JSON.stringify(nextCfg));
+                      }}
+                      className={`w-7 h-7 rounded-full border-2 transition ${characterConfig.color === c ? 'border-white scale-110 shadow-lg' : 'border-transparent'}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="pt-4 border-t border-slate-800 flex justify-end">
+              <button onClick={() => setIsEditingProfile(false)} className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg">
+                Hoàn tất
               </button>
             </div>
           </div>
