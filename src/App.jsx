@@ -15,16 +15,10 @@ const firebaseConfig = {
   measurementId: "G-88L91QZNH2"
 };
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'cherry-blossom-park-3d';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'cherry-blossom-park-3d-v2';
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
-const SAKURA_THEME = {
-  name: 'Công Viên Hoa Anh Đào (Sakura Dream)',
-  groundColor: '#065f46',
-  skyColor: '#1e1b4b',
-};
 
 const CARTOON_CHARACTERS = [
   { id: 'c1', name: 'Bé Mèo Dễ Thương', icon: '🐱', color: '#ec4899', hairColor: '#be185d' },
@@ -48,7 +42,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [hasEnteredGame, setHasEnteredGame] = useState(false);
   const [selectedChar, setSelectedChar] = useState(CARTOON_CHARACTERS[0]);
-  const [customName, setCustomName] = useState('Bạn (Player)');
+  const [customName, setCustomName] = useState('Người Chơi');
 
   const [chatInput, setChatInput] = useState('');
   const [speechBubbles, setSpeechBubbles] = useState([]);
@@ -56,13 +50,11 @@ export default function App() {
   const [targetPlayer, setTargetPlayer] = useState(null);
   const [uiToast, setUiToast] = useState(null);
 
-  // Trạng thái hiệu ứng cá nhân và ngồi ghế
   const [myEffect, setMyEffect] = useState(null);
   const [isSitting, setIsSitting] = useState(false);
 
   const canvasContainerRef = useRef(null);
-  const playerPosRef = useRef({ x: 0, z: 2, targetX: 0, targetZ: 2 });
-  const playerGroupRef = useRef(null);
+  const playerPosRef = useRef({ x: (Math.random() - 0.5) * 4, z: (Math.random() - 0.5) * 4, targetX: 0, targetZ: 0 });
   const remoteGroupsRef = useRef({});
   const screenPositionsRef = useRef({});
   const [threeLoaded, setThreeLoaded] = useState(false);
@@ -93,41 +85,13 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Đồng bộ Firebase Realtime: Vị trí người chơi, chat và hiệu ứng chọc ghẹo đích danh
+  // Đồng bộ Firebase Realtime: Vị trí người chơi, chat và hiệu ứng chọc ghẹo
   useEffect(() => {
     if (!db || !user || !hasEnteredGame) return;
 
     const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
-    const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
-      const now = Date.now() / 1000;
-      const active = [];
-      snapshot.forEach((docSnap) => {
-        const p = docSnap.data();
-        if (p.uid === user.uid && p.actionEffect && (now - (p.actionTime?.seconds || 0) < 5)) {
-          triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
-        }
-        if (p.uid && p.uid !== user.uid && (now - (p.lastSeen?.seconds || now) < 15)) {
-          active.push(p);
-        }
-      });
-      setOnlinePlayers(active);
-    });
-
-    const chatCol = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
-    const unsubChat = onSnapshot(chatCol, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === 'added') {
-          const msg = change.data();
-          if (msg && msg.text) {
-            setSpeechBubbles((prev) => [
-              ...prev,
-              { id: `b-${Date.now()}-${Math.random()}`, senderName: msg.senderName, text: msg.text, uid: msg.uid, timestamp: Date.now() }
-            ]);
-          }
-        }
-      });
-    });
-
+    
+    // Gửi heartbeat vị trí của bản thân liên tục
     const heartbeat = setInterval(() => {
       if (user && playerPosRef.current) {
         try {
@@ -144,7 +108,39 @@ export default function App() {
           }, { merge: true });
         } catch (e) {}
       }
-    }, 1000);
+    }, 800);
+
+    const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
+      const now = Date.now() / 1000;
+      const active = [];
+      snapshot.forEach((docSnap) => {
+        const p = docSnap.data();
+        if (p.uid === user.uid) {
+          // Kiểm tra xem có nhận được hiệu ứng từ người khác gửi đến không
+          if (p.actionEffect && p.actionTime && (now - (p.actionTime?.seconds || 0) < 6)) {
+            triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
+          }
+        } else if (p.uid && (now - (p.lastSeen?.seconds || now) < 20)) {
+          active.push(p);
+        }
+      });
+      setOnlinePlayers(active);
+    }, (err) => console.warn("Player sync error", err));
+
+    const chatCol = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
+    const unsubChat = onSnapshot(chatCol, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const msg = change.data();
+          if (msg && msg.text) {
+            setSpeechBubbles((prev) => [
+              ...prev,
+              { id: `b-${Date.now()}-${Math.random()}`, senderName: msg.senderName, text: msg.text, uid: msg.uid, timestamp: Date.now() }
+            ]);
+          }
+        }
+      });
+    }, (err) => console.warn("Chat sync error", err));
 
     return () => {
       unsubPlayers();
@@ -153,7 +149,6 @@ export default function App() {
     };
   }, [user, hasEnteredGame, customName, selectedChar, isSitting]);
 
-  // Tự động xóa bong bóng chat sau 5 giây
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -167,7 +162,7 @@ export default function App() {
     if (effectType === 'duck') {
       showToast('Bị Ném Giấy!', `${actorName} ném cục giấy trúng bạn! Vịt xoay 3 giây 🦆`);
     } else if (effectType === 'faint') {
-      showToast('Bị Ngáng Chân!', `${actorName} gạt chân làm bạn té xỉu 3 giây! 💤`);
+      showToast('Bị Gạt Chân!', `${actorName} gạt chân làm bạn té nằm ngang 3 giây! 💤`);
     } else if (effectType === 'flower') {
       showToast('Nhận Được Hoa!', `${actorName} tặng bạn đóa hoa hồng thắm! 🌸`);
     } else if (effectType === 'candy') {
@@ -197,15 +192,15 @@ export default function App() {
     const container = canvasContainerRef.current;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(SAKURA_THEME.skyColor);
+    scene.background = new THREE.Color(0x1e1b4b);
 
-    const camera = new THREE.PerspectiveCamera(40, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.set(0, 11, 16);
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(0, 12, 16);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     while (container.firstChild) container.removeChild(container.firstChild);
     container.appendChild(renderer.domElement);
@@ -217,8 +212,8 @@ export default function App() {
 
     // Sân cỏ công viên
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(26, 26),
-      new THREE.MeshBasicMaterial({ color: SAKURA_THEME.groundColor })
+      new THREE.PlaneGeometry(30, 30),
+      new THREE.MeshBasicMaterial({ color: 0x065f46 })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.userData = { isFloor: true };
@@ -251,7 +246,7 @@ export default function App() {
     }
     scene.add(centerObj);
 
-    // Ghế đá công viên hỗ trợ tương tác ngồi
+    // Ghế đá công viên hỗ trợ ngồi
     const createBench = (x, z, rotY) => {
       const bench = new THREE.Group();
       bench.position.set(x, 0, z);
@@ -274,12 +269,12 @@ export default function App() {
       });
       scene.add(bench);
     };
-    createBench(-5, -4, 0.5);
-    createBench(5, 4, -2.5);
-    createBench(-5, 4, 1.2);
-    createBench(5, -4, -0.5);
+    createBench(-6, -5, 0.5);
+    createBench(6, 5, -2.5);
+    createBench(-6, 5, 1.2);
+    createBench(6, -5, -0.5);
 
-    // Mô hình nhân vật 3D đầy đủ tay chân
+    // Mô hình nhân vật 3D chi tiết có tay chân
     const createDetailedHumanMesh = (colorHex, hairHex) => {
       const grp = new THREE.Group();
       const col = parseInt(colorHex.replace('#', '0x'));
@@ -343,7 +338,6 @@ export default function App() {
     const playerGroup = createDetailedHumanMesh(selectedChar.color, selectedChar.hairColor);
     playerGroup.position.set(playerPosRef.current.x, 0, playerPosRef.current.z);
     scene.add(playerGroup);
-    playerGroupRef.current = playerGroup;
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -368,8 +362,8 @@ export default function App() {
         if (obj.userData?.isFloor) {
           setIsSitting(false);
           const pt = intersects[i].point;
-          playerPosRef.current.targetX = Math.max(-11, Math.min(11, pt.x));
-          playerPosRef.current.targetZ = Math.max(-11, Math.min(11, pt.z));
+          playerPosRef.current.targetX = Math.max(-13, Math.min(13, pt.x));
+          playerPosRef.current.targetZ = Math.max(-13, Math.min(13, pt.z));
           return;
         }
       }
@@ -399,7 +393,6 @@ export default function App() {
         let rMesh = remoteMap[p.uid];
         if (!rMesh) {
           rMesh = createDetailedHumanMesh(p.color || '#3b82f6', p.hairColor || '#1e293b');
-          rMesh.userData = { uid: p.uid, name: p.name };
           scene.add(rMesh);
           remoteMap[p.uid] = rMesh;
         }
@@ -513,7 +506,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
       
       {uiToast && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
@@ -527,144 +520,149 @@ export default function App() {
         </div>
       )}
 
-      {/* Header */}
-      <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-pink-600 rounded-xl text-white shadow-md"><Sparkles className="w-5 h-5" /></div>
-          <div>
-            <h1 className="font-bold text-pink-400 text-base">🌸 Công Viên Hoa Anh Đào (50m2)</h1>
-            <p className="text-[11px] text-slate-400">Đang online: {onlinePlayers.length + 1} người chơi</p>
+      {/* Main Layout Container (Cân đối hoàn toàn màn hình, không bị lệch lề) */}
+      <div className="flex-1 flex flex-col h-full w-full relative overflow-hidden">
+        
+        {/* Header */}
+        <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-pink-600 rounded-xl text-white shadow-md"><Sparkles className="w-5 h-5" /></div>
+            <div>
+              <h1 className="font-bold text-pink-400 text-base">🌸 Công Viên Hoa Anh Đào (50m2)</h1>
+              <p className="text-[11px] text-slate-400">Đang online: {onlinePlayers.length + 1} người chơi</p>
+            </div>
           </div>
-        </div>
-        <button
-          onClick={() => setHasEnteredGame(false)}
-          className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 transition"
-        >
-          Đổi Nhân Vật
-        </button>
-      </header>
+          <button
+            onClick={() => setHasEnteredGame(false)}
+            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold rounded-xl text-slate-300 transition"
+          >
+            Đổi Nhân Vật
+          </button>
+        </header>
 
-      {/* Main 3D Viewport */}
-      <div className="flex-1 relative overflow-hidden flex flex-col w-full">
-        <div ref={canvasContainerRef} className="w-full flex-1 cursor-grab active:cursor-grabbing relative" />
+        {/* 3D Viewport */}
+        <div className="flex-1 relative overflow-hidden flex flex-col w-full h-full">
+          <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing relative" />
 
-        {/* Bong bóng chat 3D bám đúng đầu từng người chơi */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden z-30">
-          {speechBubbles.map((bubble) => {
-            const pos = screenPositionsRef.current[bubble.uid];
-            if (!pos || !pos.visible) return null;
-            return (
-              <div
-                key={bubble.id}
-                className="absolute transform -translate-x-1/2 -translate-y-full transition-all duration-200"
-                style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-              >
-                <div className="bg-white text-slate-950 px-4 py-2 rounded-2xl shadow-xl border-2 border-pink-500 text-xs font-bold flex items-center gap-2">
-                  <MessageSquare className="w-3.5 h-3.5 text-pink-500" />
-                  <span><b>{bubble.senderName}:</b> {bubble.text}</span>
+          {/* Bong bóng chat 3D bám chuẩn vị trí đầu từng người chơi */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden z-30">
+            {speechBubbles.map((bubble) => {
+              const pos = screenPositionsRef.current[bubble.uid];
+              if (!pos || !pos.visible) return null;
+              return (
+                <div
+                  key={bubble.id}
+                  className="absolute transform -translate-x-1/2 -translate-y-full transition-all duration-200"
+                  style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
+                >
+                  <div className="bg-white text-slate-950 px-4 py-2 rounded-2xl shadow-xl border-2 border-pink-500 text-xs font-bold flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-pink-500" />
+                    <span><b>{bubble.senderName}:</b> {bubble.text}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Hiệu ứng trạng thái cá nhân */}
+          {myEffect && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 animate-bounce text-center">
+              <div className="px-6 py-4 rounded-3xl bg-slate-900/95 border-2 border-pink-500 shadow-2xl text-white space-y-1">
+                <div className="text-4xl">
+                  {myEffect === 'duck' && '🦆💫'}
+                  {myEffect === 'faint' && '💤😵'}
+                  {myEffect === 'flower' && '🌸💐'}
+                  {myEffect === 'candy' && '🍬🍭'}
+                </div>
+                <div className="font-bold text-sm text-pink-300">
+                  {myEffect === 'duck' && 'Đang bị ném giấy choáng váng!'}
+                  {myEffect === 'faint' && 'Đang bị gạt chân ngã nằm ngang!'}
+                  {myEffect === 'flower' && 'Nhận được hoa tươi thắm!'}
+                  {myEffect === 'candy' && 'Nhận được kẹo ngọt ngào!'}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          )}
 
-        {/* Hiệu ứng trạng thái cá nhân */}
-        {myEffect && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 animate-bounce text-center">
-            <div className="px-6 py-4 rounded-3xl bg-slate-900/95 border-2 border-pink-500 shadow-2xl text-white space-y-1">
-              <div className="text-4xl">
-                {myEffect === 'duck' && '🦆💫'}
-                {myEffect === 'faint' && '💤😵'}
-                {myEffect === 'flower' && '🌸💐'}
-                {myEffect === 'candy' && '🍬🍭'}
+          {/* Danh sách người chơi online để bấm vào chọc ghẹo */}
+          <div className="absolute top-4 left-6 z-20 bg-slate-900/90 backdrop-blur border border-slate-800 p-3 rounded-2xl shadow-xl max-w-xs space-y-2">
+            <div className="text-xs font-bold text-pink-400 uppercase tracking-wider">Người chơi trong công viên:</div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+              <div className="flex items-center justify-between text-xs bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700 text-white font-medium">
+                <span>🟢 Bạn ({customName})</span>
+                <span className="text-[10px] text-slate-400">{isSitting ? 'Đang ngồi ghế' : 'Đang đi dạo'}</span>
               </div>
-              <div className="font-bold text-sm text-pink-300">
-                {myEffect === 'duck' && 'Đang bị ném giấy choáng váng!'}
-                {myEffect === 'faint' && 'Đang bị gạt chân ngã xỉu!'}
-                {myEffect === 'flower' && 'Nhận được hoa tươi thắm!'}
-                {myEffect === 'candy' && 'Nhận được kẹo ngọt ngào!'}
-              </div>
+              {onlinePlayers.map((p) => (
+                <div
+                  key={p.uid}
+                  onClick={() => setTargetPlayer(p)}
+                  className="flex items-center justify-between text-xs bg-slate-800 hover:bg-pink-600/20 px-3 py-1.5 rounded-xl border border-slate-700 hover:border-pink-500 text-slate-200 cursor-pointer transition"
+                >
+                  <span className="truncate">👤 {p.name}</span>
+                  <span className="text-[10px] bg-pink-500/20 text-pink-300 px-2 py-0.5 rounded-lg font-bold">Chọc Ghẹo</span>
+                </div>
+              ))}
             </div>
           </div>
-        )}
 
-        {/* Danh sách người chơi online để bấm vào chọc ghẹo */}
-        <div className="absolute top-4 left-6 z-20 bg-slate-900/90 backdrop-blur border border-slate-800 p-3 rounded-2xl shadow-xl max-w-xs space-y-2">
-          <div className="text-xs font-bold text-pink-400 uppercase tracking-wider">Người chơi trong công viên:</div>
-          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-            <div className="flex items-center justify-between text-xs bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700 text-white font-medium">
-              <span>🟢 Bạn ({customName})</span>
-              <span className="text-[10px] text-slate-400">{isSitting ? 'Đang ngồi ghế' : 'Đang đi dạo'}</span>
-            </div>
-            {onlinePlayers.map((p) => (
-              <div
-                key={p.uid}
-                onClick={() => setTargetPlayer(p)}
-                className="flex items-center justify-between text-xs bg-slate-800 hover:bg-pink-600/20 px-3 py-1.5 rounded-xl border border-slate-700 hover:border-pink-500 text-slate-200 cursor-pointer transition"
-              >
-                <span className="truncate">👤 {p.name}</span>
-                <span className="text-[10px] bg-pink-500/20 text-pink-300 px-2 py-0.5 rounded-lg font-bold">Chọc Ghẹo</span>
+          {/* Modal Chọn Hành Động Chọc Ghẹo */}
+          {targetPlayer && (
+            <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-bold text-white text-sm">Chọc ghẹo: {targetPlayer.name}</h3>
+                  <button onClick={() => setTargetPlayer(null)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400">Chọn hành động gửi trực tiếp đến người chơi này:</p>
+                <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+                  <button
+                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'duck', 'ném cục giấy choáng váng')}
+                    className="p-3 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition flex flex-col items-center gap-1"
+                  >
+                    <span className="text-xl">📄</span> Ném Giấy (Vịt Xoay 3s)
+                  </button>
+                  <button
+                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'faint', 'gạt chân té nằm ngang')}
+                    className="p-3 rounded-2xl bg-slate-800 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500 text-rose-400 transition flex flex-col items-center gap-1"
+                  >
+                    <span className="text-xl">🦶</span> Gạt Chân (Té Ngang 3s)
+                  </button>
+                  <button
+                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'flower', 'tặng đóa hoa tươi')}
+                    className="p-3 rounded-2xl bg-slate-800 hover:bg-pink-600/20 border border-slate-700 hover:border-pink-500 text-pink-400 transition flex flex-col items-center gap-1"
+                  >
+                    <span className="text-xl">🌸</span> Tặng Hoa
+                  </button>
+                  <button
+                    onClick={() => sendActionToPlayer(targetPlayer.uid, 'candy', 'tặng viên kẹo ngọt')}
+                    className="p-3 rounded-2xl bg-slate-800 hover:bg-purple-600/20 border border-slate-700 hover:border-purple-500 text-purple-400 transition flex flex-col items-center gap-1"
+                  >
+                    <span className="text-xl">🍬</span> Tặng Kẹo
+                  </button>
+                </div>
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Khung Chat Nhập Liệu */}
+          <div className="absolute bottom-6 left-6 right-6 z-20 flex justify-center">
+            <form onSubmit={handleSendChat} className="flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-slate-800 p-2 rounded-2xl shadow-xl w-full max-w-md">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Nhập chat hiện bong bóng trên đầu 5 giây..."
+                className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 focus:outline-none focus:border-pink-500 text-white"
+              />
+              <button type="submit" className="p-2.5 bg-pink-600 hover:bg-pink-500 rounded-xl text-white shadow-md transition">
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
           </div>
         </div>
 
-        {/* Modal Chọn Hành Động Chọc Ghẹo */}
-        {targetPlayer && (
-          <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-white text-sm">Chọc ghẹo: {targetPlayer.name}</h3>
-                <button onClick={() => setTargetPlayer(null)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <p className="text-xs text-slate-400">Chọn hành động gửi trực tiếp đến người chơi này:</p>
-              <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
-                <button
-                  onClick={() => sendActionToPlayer(targetPlayer.uid, 'duck', 'ném cục giấy choáng váng')}
-                  className="p-3 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition flex flex-col items-center gap-1"
-                >
-                  <span className="text-xl">📄</span> Ném Giấy (Vịt Xoay 3s)
-                </button>
-                <button
-                  onClick={() => sendActionToPlayer(targetPlayer.uid, 'faint', 'gạt chân ngã xỉu')}
-                  className="p-3 rounded-2xl bg-slate-800 hover:bg-rose-600/20 border border-slate-700 hover:border-rose-500 text-rose-400 transition flex flex-col items-center gap-1"
-                >
-                  <span className="text-xl">🦶</span> Gạt Chân (Xỉu 3s)
-                </button>
-                <button
-                  onClick={() => sendActionToPlayer(targetPlayer.uid, 'flower', 'tặng đóa hoa tươi')}
-                  className="p-3 rounded-2xl bg-slate-800 hover:bg-pink-600/20 border border-slate-700 hover:border-pink-500 text-pink-400 transition flex flex-col items-center gap-1"
-                >
-                  <span className="text-xl">🌸</span> Tặng Hoa
-                </button>
-                <button
-                  onClick={() => sendActionToPlayer(targetPlayer.uid, 'candy', 'tặng viên kẹo ngọt')}
-                  className="p-3 rounded-2xl bg-slate-800 hover:bg-purple-600/20 border border-slate-700 hover:border-purple-500 text-purple-400 transition flex flex-col items-center gap-1"
-                >
-                  <span className="text-xl">🍬</span> Tặng Kẹo
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Khung Chat Nhập Liệu */}
-        <div className="absolute bottom-6 left-6 right-6 z-20 flex justify-center">
-          <form onSubmit={handleSendChat} className="flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-slate-800 p-2 rounded-2xl shadow-xl w-full max-w-md">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              placeholder="Nhập chat hiện bong bóng trên đầu 5 giây..."
-              className="flex-1 px-3.5 py-2 text-xs rounded-xl bg-slate-800 border border-slate-700 focus:outline-none focus:border-pink-500 text-white"
-            />
-            <button type="submit" className="p-2.5 bg-pink-600 hover:bg-pink-500 rounded-xl text-white shadow-md transition">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-        </div>
       </div>
     </div>
   );
