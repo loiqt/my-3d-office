@@ -231,6 +231,7 @@ export default function App() {
   const deskConfigsRef = useRef(deskConfigs); deskConfigsRef.current = deskConfigs;
   const isLayoutModeRef = useRef(isLayoutMode); isLayoutModeRef.current = isLayoutMode;
   const chatMessagesRef = useRef(chatMessages); chatMessagesRef.current = chatMessages;
+  const characterConfigRef = useRef(characterConfig); characterConfigRef.current = characterConfig;
 
   const showToast = (title, desc, colorClass) => {
     setUiToast({ title, desc, colorClass });
@@ -257,10 +258,11 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // Firebase Sync: Bàn, Chat, Người chơi & Nhận hiệu ứng chọc ghẹo thời gian thực
+  // ĐỒNG BỘ VỊ TRÍ & NGƯỜI CHƠI ONLINE QUA FIREBASE
   useEffect(() => {
     if (!db || !user) return;
 
+    // 1. Đồng bộ vị trí Bàn & Đồ vật
     const desksCol = collection(db, 'artifacts', appId, 'public', 'data', 'desks');
     const unsubDesks = onSnapshot(desksCol, (snapshot) => {
       const loadedDesks = { ...DEFAULT_DESK_ITEMS };
@@ -288,6 +290,7 @@ export default function App() {
       }
     });
 
+    // 2. Đồng bộ Chat
     const chatCol = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
     const unsubChat = onSnapshot(chatCol, (snapshot) => {
       const msgs = [];
@@ -298,29 +301,52 @@ export default function App() {
       }
     });
 
+    // 3. Đồng bộ Danh sách người chơi online & Kiểm tra hiệu ứng chọc ghẹo
     const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
     const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
       const now = Date.now() / 1000;
       const active = [];
       snapshot.forEach((docSnap) => {
         const p = docSnap.data();
-        // Kiểm tra xem có hiệu ứng chọc ghẹo gửi đến bản thân hay không
-        if (p.uid === user.uid && p.actionEffect && (now - (p.actionTime?.seconds || 0) < 4)) {
+        if (p.uid === user.uid && p.actionEffect && (now - (p.actionTime?.seconds || 0) < 5)) {
           triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
         }
-        if (p.uid && p.uid !== user.uid && (now - (p.lastSeen?.seconds || now) < 15)) active.push(p);
+        if (p.uid && p.uid !== user.uid && (now - (p.lastSeen?.seconds || now) < 20)) {
+          active.push(p);
+        }
       });
       setOnlinePlayers(active);
     });
 
-    return () => { unsubDesks(); unsubChat(); unsubPlayers(); };
+    // 4. Định kỳ phát sóng tọa độ của bản thân lên Firebase (mỗi 1.5 giây)
+    const heartbeatInterval = setInterval(() => {
+      if (user && playerPosRef.current) {
+        try {
+          const pDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid);
+          setDoc(pDoc, {
+            uid: user.uid,
+            name: characterConfigRef.current.name,
+            x: playerPosRef.current.x,
+            z: playerPosRef.current.z,
+            color: characterConfigRef.current.color,
+            lastSeen: serverTimestamp()
+          }, { merge: true });
+        } catch (e) {}
+      }
+    }, 1500);
+
+    return () => {
+      unsubDesks();
+      unsubChat();
+      unsubPlayers();
+      clearInterval(heartbeatInterval);
+    };
   }, [user]);
 
-  // Thực thi hiệu ứng trực tiếp trên nhân vật của bạn khi nhận được lệnh
   const triggerLocalEffect = (effectType, actorName) => {
     if (effectType === 'duck') {
       sfx.play('throw');
-      showToast('Bị Ném Giấy!', `${actorName} vừa chọi giấy vào bạn! Vịt xoay 3 giây 🦆`, 'amber');
+      showToast('Bị Ném Giấy!', `${actorName} vừa ném giấy vào bạn! Vịt xoay 3 giây 🦆`, 'amber');
       if (playerGroupRef.current) {
         const duckSprite = playerGroupRef.current.getObjectByName('duckSprite');
         if (duckSprite) duckSprite.visible = true;
@@ -347,7 +373,6 @@ export default function App() {
     }
   };
 
-  // Gửi hiệu ứng chọc ghẹo đến người chơi khác qua Firebase
   const sendActionToPlayer = async (targetPlayer, effectType) => {
     if (!db || !targetPlayer.uid) return;
     try {
@@ -507,7 +532,6 @@ export default function App() {
             if (obj.userData?.isAvatarObject) {
               const targetId = obj.userData.teammateId;
               const found = teammatesRef.current.find((t) => t.id === targetId || t.uid === targetId);
-              // Nếu KHÔNG phải chế độ sắp xếp bàn, click vào avatar người khác sẽ mở bảng tương tác chọc ghẹo
               if (found && !found.isUser && !isLayoutModeRef.current) {
                 setActiveTargetTeammate(found); sfx.play('click'); return;
               }
@@ -516,12 +540,10 @@ export default function App() {
             obj = obj.parent;
           }
 
-          // CHẾ ĐỘ SẮP XẾP BÀN: Kéo thả bàn mượt mà
           if (isLayoutModeRef.current && clickedDeskId) {
             isDraggingEntireDesk = true; activeDraggedDeskId = clickedDeskId; sfx.play('drag'); return;
           }
 
-          // CHẾ ĐỘ THƯỜNG: Click chọn bàn để trang trí & phóng to camera
           if (clickedDeskId && !isLayoutModeRef.current) {
             setSelectedDeskId(clickedDeskId);
             cameraTargetFocusRef.current = clickedDeskId;
@@ -610,19 +632,24 @@ export default function App() {
         camDist = 22;
       }
 
-      if (user && db && (Math.abs(curr.targetX - curr.x) > 0.05 || Math.abs(curr.targetZ - curr.z) > 0.05)) {
-        try {
-          setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid), {
-            uid: user.uid, name: characterConfig.name, x: curr.x, z: curr.z, color: characterConfig.color, lastSeen: serverTimestamp()
-          }, { merge: true });
-        } catch (e) {}
-      }
+      // Render & Cập nhật vị trí người chơi khác (Remote Players)
+      const currentActivePlayers = onlinePlayersRef.current;
+      const activeUids = new Set(currentActivePlayers.map(p => p.uid));
 
-      onlinePlayersRef.current.forEach((rp) => {
+      // Xóa các avatar người chơi đã offline
+      Object.keys(remoteMeshMap).forEach(uid => {
+        if (!activeUids.has(uid)) {
+          remotePlayersGroup.remove(remoteMeshMap[uid]);
+          delete remoteMeshMap[uid];
+        }
+      });
+
+      currentActivePlayers.forEach((rp) => {
         let rMesh = remoteMeshMap[rp.uid];
         if (!rMesh) {
           rMesh = createHumanMesh({ id: rp.uid, name: rp.name, color: rp.color || '#ec4899' }, true);
-          remotePlayersGroup.add(rMesh); remoteMeshMap[rp.uid] = rMesh;
+          remotePlayersGroup.add(rMesh);
+          remoteMeshMap[rp.uid] = rMesh;
         }
         rMesh.position.set(rp.x || 0, 0, rp.z || 0);
       });
@@ -790,7 +817,7 @@ export default function App() {
       {/* Action Popup Modal khi chọn Người chơi khác (Chọc ghẹo đối phương) */}
       {activeTargetTeammate && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl">
+          <div className="w-0.5 max-w-sm p-6 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-2xl w-full">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-white text-base">Chọc ghẹo: {activeTargetTeammate.name}</h3>
               <button onClick={() => setActiveTargetTeammate(null)} className="p-1 rounded-full hover:bg-slate-800 text-slate-400"><X className="w-4 h-4" /></button>
@@ -804,7 +831,7 @@ export default function App() {
                 }}
                 className="p-3.5 rounded-2xl bg-slate-800 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500 text-amber-400 transition flex flex-col items-center gap-1.5"
               >
-                <span className="text-xl">📄</span> Ném Cục Giấy (Vịt Xoay 3s)
+                <span className="text-xl">📄</span> Ném Cục Giấy (Vịt Xوay 3s)
               </button>
               <button
                 onClick={() => {
