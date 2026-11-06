@@ -242,7 +242,7 @@ function getDefaultDesk3DPosition(id) {
   }
 }
 
-// Cố định vị trí tán lá cây (Loại bỏ ngẫu nhiên Math.random)
+// Cố định vị trí tán lá cây tĩnh
 const LEAF_OFFSETS = [
   { x: 0.05, z: 0.04 },
   { x: -0.06, z: 0.05 },
@@ -436,14 +436,14 @@ export default function App() {
     };
   }, [isSitting]);
 
-  // --- 3D Scene Initialization (OPTIMIZED FOR HIGH FPS & ZERO RE-CREATION LAG) ---
+  // --- 3D Scene Initialization ---
   useEffect(() => {
     if (!threeLoaded || !canvasContainerRef.current) return;
 
     const THREE = window.THREE;
     const container = canvasContainerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(isDarkMode ? 0x0f172a : 0xfefcf8);
@@ -454,6 +454,9 @@ export default function App() {
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = false;
+    renderer.domElement.style.display = 'block';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
 
     while (container.firstChild) {
       container.removeChild(container.firstChild);
@@ -647,7 +650,7 @@ export default function App() {
 
     scene.add(sofaGroup);
 
-    // Potted Trees (STATIC - NO RANDOM JITTER)
+    // Potted Trees (Static)
     const createPottedTree = (px, pz, scale = 1.0) => {
       const treeGroup = new THREE.Group();
       treeGroup.position.set(px, 0, pz);
@@ -1440,6 +1443,18 @@ export default function App() {
     domElem.addEventListener('wheel', onWheel, { passive: false });
     domElem.addEventListener('contextmenu', onContextMenu);
 
+    // Tự động căn chỉnh lại kích thước Canvas 3D khi cửa sổ thay đổi
+    const resizeObserver = new ResizeObserver(() => {
+      if (!container) return;
+      const w = container.clientWidth || window.innerWidth;
+      const h = container.clientHeight || window.innerHeight;
+      if (w === 0 || h === 0) return;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    });
+    resizeObserver.observe(container);
+
     let animationFrameId;
     let walkClock = 0;
     let prankClock = 0;
@@ -1597,6 +1612,9 @@ export default function App() {
 
       // Project 3D Speech Bubbles Coordinates to 2D Screen Space
       const newScreenPos = {};
+      const cWidth = container.clientWidth || window.innerWidth;
+      const cHeight = container.clientHeight || window.innerHeight;
+
       speechBubblesRef.current.forEach((bubble) => {
         let worldPos = new THREE.Vector3();
         if (bubble.deskId === currentUser.id && playerAvatarMeshRef) {
@@ -1607,8 +1625,8 @@ export default function App() {
         }
         worldPos.project(camera);
 
-        const x = (worldPos.x * 0.5 + 0.5) * width;
-        const y = (-(worldPos.y * 0.5) + 0.5) * height;
+        const x = (worldPos.x * 0.5 + 0.5) * cWidth;
+        const y = (-(worldPos.y * 0.5) + 0.5) * cHeight;
         const visible = worldPos.z < 1;
         newScreenPos[bubble.deskId] = { x, y, visible };
       });
@@ -1619,24 +1637,14 @@ export default function App() {
 
     animate();
 
-    const handleResize = () => {
-      if (!canvasContainerRef.current) return;
-      const w = canvasContainerRef.current.clientWidth;
-      const h = canvasContainerRef.current.clientHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
-    window.addEventListener('resize', handleResize);
-
     return () => {
       cancelAnimationFrame(animationFrameId);
+      resizeObserver.disconnect();
       domElem.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       domElem.removeEventListener('wheel', onWheel);
       domElem.removeEventListener('contextmenu', onContextMenu);
-      window.removeEventListener('resize', handleResize);
     };
   }, [threeLoaded, isDarkMode, officeName]);
 
@@ -1832,7 +1840,24 @@ export default function App() {
   const currentDeskItems = selectedDeskId ? deskConfigs[selectedDeskId] || [] : [];
 
   return (
-    <div className={`flex flex-col h-screen w-screen overflow-hidden ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'}`}>
+    <div className={`w-screen h-screen overflow-hidden flex flex-col ${isDarkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-800'}`}>
+      
+      {/* CSS Reset Ép Full Màn Hình Cố Định */}
+      <style>{`
+        html, body, #root {
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          overflow: hidden !important;
+          box-sizing: border-box !important;
+        }
+        canvas {
+          display: block !important;
+          width: 100% !important;
+          height: 100% !important;
+        }
+      `}</style>
       
       {/* 1. MANDATORY ONBOARDING MODAL */}
       {!hasOnboarded && (
@@ -1953,7 +1978,7 @@ export default function App() {
       )}
 
       {/* Header Bar */}
-      <header className={`h-16 border-b px-6 flex items-center justify-between z-10 shadow-sm ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
+      <header className={`h-16 border-b px-6 flex items-center justify-between z-10 shadow-sm shrink-0 ${isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'}`}>
         <div className="flex items-center gap-3">
           <div className="p-2 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-500/30">
             <Building2 className="w-5 h-5" />
@@ -2042,8 +2067,8 @@ export default function App() {
 
       {/* Main Viewport */}
       <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 relative bg-slate-950">
-          <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+        <div className="flex-1 relative bg-slate-950 overflow-hidden">
+          <div ref={canvasContainerRef} className="w-full h-full cursor-grab active:cursor-grabbing relative" />
 
           {/* 3D Floating Speech Bubbles Overlay */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
@@ -2177,7 +2202,7 @@ export default function App() {
 
         {/* Desk Decorator Panel */}
         {selectedDeskId !== null && (
-          <div className={`w-96 border-l flex flex-col z-20 shadow-2xl backdrop-blur-xl ${isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
+          <div className={`w-96 border-l flex flex-col z-20 shadow-2xl backdrop-blur-xl shrink-0 ${isDarkMode ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'}`}>
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shadow" style={{ backgroundColor: teammates[selectedDeskId - 1]?.color }}>
@@ -2322,7 +2347,7 @@ export default function App() {
         )}
 
         {/* Right Community & Chat Panel */}
-        <div className={`w-80 border-l flex flex-col z-10 shadow-lg ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+        <div className={`w-80 border-l flex flex-col z-10 shadow-lg shrink-0 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
           <div className="flex border-b border-slate-800">
             <button
               onClick={() => { setActiveRightTab('chat'); sfx.play('click'); }}
