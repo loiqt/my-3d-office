@@ -11,6 +11,7 @@ import {
   collection, 
   doc, 
   setDoc, 
+  deleteDoc,
   onSnapshot, 
   serverTimestamp 
 } from 'firebase/firestore';
@@ -175,7 +176,10 @@ const sfx = new WorkplaceSoundSystem();
 // Initial 15 Teammates & Workstations
 const INITIAL_TEAMMATES = [
   { id: 1, name: "Bạn (Player)", gender: "male", hairStyle: "short", role: "Product Creator", isUser: true, status: "Tự do đi dạo 🚶‍♂️", emotion: "✨", color: "#3B82F6", hairColor: "#1E293B", skinColor: "#fde047" },
-  { id: 2, name: "Sarah Chen", gender: "female", hairStyle: "long", role: "Lead UI/UX Designer", isUser: false, status: "Vẽ Figma Icon 🎨", emotion: "💡", color: "#EC4899", hairColor: "#BE185D", skinColor: "#fde047" }
+  { id: 2, name: "Sarah Chen", gender: "female", hairStyle: "long", role: "Lead UI/UX Designer", isUser: false, status: "Vẽ Figma Icon 🎨", emotion: "💡", color: "#EC4899", hairColor: "#BE185D", skinColor: "#fde047" },
+  { id: 3, name: "Alex Rivers", gender: "male", hairStyle: "spiky", role: "Fullstack Engineer", isUser: false, status: "Fix bug 3D 🐛", emotion: "💻", color: "#10B981", hairColor: "#047857", skinColor: "#fde047" },
+  { id: 4, name: "Elena Rostova", gender: "female", hairStyle: "ponytail", role: "Product Manager", isUser: false, status: "Họp Sprint 📊", emotion: "☕", color: "#8B5CF6", hairColor: "#4C1D95", skinColor: "#fde047" },
+  { id: 5, name: "Marcus Vance", gender: "male", hairStyle: "short", role: "Tech Lead", isUser: false, status: "Review PR 🔍", emotion: "⚡", color: "#F59E0B", hairColor: "#78350F", skinColor: "#fde047" }
 ];
 
 // Item Catalog for Decorator
@@ -287,6 +291,7 @@ export default function App() {
   const [dizzyStates, setDizzyStates] = useState({});
   const [trippedStates, setTrippedStates] = useState({});
   const [speechBubbles, setSpeechBubbles] = useState([]);
+  const [onlinePlayers, setOnlinePlayers] = useState([]);
 
   const [activeCategory, setActiveCategory] = useState('tech');
   const [activeRightTab, setActiveRightTab] = useState('chat');
@@ -294,9 +299,11 @@ export default function App() {
   const [isEditingOfficeName, setIsEditingOfficeName] = useState(false);
 
   const playerPosRef = useRef({ x: -3.5 * 2.55, z: 3.2, targetX: -3.5 * 2.55, targetZ: 3.2 });
+  const lastSyncedPosRef = useRef({ x: 0, z: 0 });
+  const lastPosSyncTimeRef = useRef(0);
   const flyingProjectilesRef = useRef([]);
 
-  // Dynamic References to avoid re-mounting Three.js canvas on state change
+  // Dynamic References
   const deskConfigsRef = useRef(deskConfigs);
   deskConfigsRef.current = deskConfigs;
 
@@ -326,6 +333,9 @@ export default function App() {
 
   const teammatesRef = useRef(teammates);
   teammatesRef.current = teammates;
+
+  const onlinePlayersRef = useRef(onlinePlayers);
+  onlinePlayersRef.current = onlinePlayers;
 
   const desk3DMeshMapRef = useRef({});
 
@@ -384,9 +394,11 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Real-time Firebase Synchronization ---
   useEffect(() => {
     if (!db || !user) return;
     try {
+      // 1. Sync Desks Configuration
       const desksCol = collection(db, 'artifacts', appId, 'public', 'data', 'desks');
       const unsubDesks = onSnapshot(desksCol, (snapshot) => {
         const loadedDesks = { ...DEFAULT_DESK_ITEMS };
@@ -397,6 +409,7 @@ export default function App() {
         setDeskConfigs(loadedDesks);
       }, (err) => console.warn("Firestore desks error", err));
 
+      // 2. Sync Chat Messages
       const chatCol = collection(db, 'artifacts', appId, 'public', 'data', 'chat');
       const unsubChat = onSnapshot(chatCol, (snapshot) => {
         const msgs = [];
@@ -407,9 +420,39 @@ export default function App() {
         }
       }, (err) => console.warn("Firestore chat error", err));
 
+      // 3. Sync Online Players Presence Real-time
+      const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+      const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
+        const nowSec = Date.now() / 1000;
+        const activeRemotePlayers = [];
+
+        snapshot.forEach((docSnap) => {
+          const p = docSnap.data();
+          if (p.uid && p.uid !== user.uid) {
+            // Lọc bỏ người chơi offline quá 15 giây
+            const lastSeenSec = p.lastSeen?.seconds || nowSec;
+            if (nowSec - lastSeenSec < 15) {
+              activeRemotePlayers.push(p);
+            }
+          }
+        });
+        setOnlinePlayers(activeRemotePlayers);
+      }, (err) => console.warn("Firestore players error", err));
+
+      // Clean up player document on tab unload
+      const handleBeforeUnload = () => {
+        try {
+          const pDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid);
+          deleteDoc(pDoc);
+        } catch (e) {}
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+
       return () => {
         unsubDesks();
         unsubChat();
+        unsubPlayers();
+        window.removeEventListener('beforeunload', handleBeforeUnload);
       };
     } catch (e) {
       console.warn("Firestore sync error", e);
@@ -708,9 +751,13 @@ export default function App() {
     const desksGroup = new THREE.Group();
     scene.add(desksGroup);
 
+    const remotePlayersGroup = new THREE.Group();
+    scene.add(remotePlayersGroup);
+
     const avatarGroupMapRef = {};
     const dizzyDucksGroupMapRef = {};
     const zzzSpriteMapRef = {};
+    const remotePlayerMeshMapRef = {};
 
     let playerAvatarMeshRef = null;
     let playerAvatarArmsRef = [];
@@ -1443,7 +1490,6 @@ export default function App() {
     domElem.addEventListener('wheel', onWheel, { passive: false });
     domElem.addEventListener('contextmenu', onContextMenu);
 
-    // Tự động căn chỉnh lại kích thước Canvas 3D khi cửa sổ thay đổi
     const resizeObserver = new ResizeObserver(() => {
       if (!container) return;
       const w = container.clientWidth || window.innerWidth;
@@ -1463,6 +1509,61 @@ export default function App() {
       animationFrameId = requestAnimationFrame(animate);
       prankClock += 0.05;
       const nowTime = Date.now();
+
+      // Render Remote Multiplayer Players 3D
+      const activeUids = new Set();
+      onlinePlayersRef.current.forEach((rPlayer) => {
+        activeUids.add(rPlayer.uid);
+        let rMeshGroup = remotePlayerMeshMapRef[rPlayer.uid];
+
+        if (!rMeshGroup) {
+          rMeshGroup = createDetailedHumanAvatarMesh({
+            id: rPlayer.uid,
+            name: rPlayer.name || 'Friend',
+            color: rPlayer.color || '#3b82f6',
+            gender: rPlayer.gender || 'male',
+            hairStyle: rPlayer.hairStyle || 'short',
+            hairColor: rPlayer.hairColor || '#1e293b',
+            skinColor: rPlayer.skinColor || '#fde047'
+          }, false, rPlayer.isSitting);
+
+          // Nametag Floating Mesh
+          const nameCanvas = document.createElement('canvas');
+          nameCanvas.width = 256;
+          nameCanvas.height = 64;
+          const nCtx = nameCanvas.getContext('2d');
+          nCtx.fillStyle = '#2563eb';
+          if (nCtx.roundRect) nCtx.roundRect(8, 8, 240, 48, 12); else nCtx.fillRect(8, 8, 240, 48);
+          nCtx.fill();
+          nCtx.fillStyle = '#ffffff';
+          nCtx.font = 'bold 22px Inter, sans-serif';
+          nCtx.textAlign = 'center';
+          nCtx.fillText(rPlayer.name || 'Friend', 128, 40);
+
+          const nameTex = new THREE.CanvasTexture(nameCanvas);
+          const nameSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTex, transparent: true }));
+          nameSprite.scale.set(1.5, 0.4, 1);
+          nameSprite.position.set(0, 1.8, 0);
+          rMeshGroup.add(nameSprite);
+
+          rMeshGroup.position.set(rPlayer.x || 0, 0, rPlayer.z || 0);
+          remotePlayersGroup.add(rMeshGroup);
+          remotePlayerMeshMapRef[rPlayer.uid] = rMeshGroup;
+        }
+
+        // Smooth Lerp Position Update
+        rMeshGroup.position.x += (rPlayer.x - rMeshGroup.position.x) * 0.15;
+        rMeshGroup.position.z += (rPlayer.z - rMeshGroup.position.z) * 0.15;
+        if (rPlayer.rotY !== undefined) rMeshGroup.rotation.y = rPlayer.rotY;
+      });
+
+      // Remove disconnected players
+      Object.keys(remotePlayerMeshMapRef).forEach((uid) => {
+        if (!activeUids.has(uid)) {
+          remotePlayersGroup.remove(remotePlayerMeshMapRef[uid]);
+          delete remotePlayerMeshMapRef[uid];
+        }
+      });
 
       teammatesRef.current.forEach((tm) => {
         const avatarGrp = avatarGroupMapRef[tm.id];
@@ -1596,6 +1697,34 @@ export default function App() {
         }
       }
 
+      // Throttle Update Player Position to Firebase (150ms)
+      if (user && db) {
+        const distToLastSynced = Math.sqrt(
+          Math.pow(lastSyncedPosRef.current.x - curr.x, 2) + Math.pow(lastSyncedPosRef.current.z - curr.z, 2)
+        );
+        if ((distToLastSynced > 0.1 || nowTime - lastPosSyncTimeRef.current > 3000) && (nowTime - lastPosSyncTimeRef.current > 150)) {
+          lastSyncedPosRef.current = { x: curr.x, z: curr.z };
+          lastPosSyncTimeRef.current = nowTime;
+          try {
+            const playerDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid);
+            setDoc(playerDoc, {
+              uid: user.uid,
+              name: currentUser.name,
+              x: curr.x,
+              z: curr.z,
+              rotY: playerAvatarMeshRef ? playerAvatarMeshRef.rotation.y : 0,
+              color: currentUser.color,
+              gender: currentUser.gender,
+              hairStyle: currentUser.hairStyle,
+              hairColor: currentUser.hairColor,
+              skinColor: currentUser.skinColor,
+              isSitting: isSittingRef.current,
+              lastSeen: serverTimestamp()
+            }, { merge: true });
+          } catch (e) {}
+        }
+      }
+
       const activeDeskId = selectedDeskIdRef.current;
       if (activeDeskId !== null) {
         const deskPos = deskLayoutPositionsRef.current[activeDeskId] || getDefaultDesk3DPosition(activeDeskId);
@@ -1646,7 +1775,7 @@ export default function App() {
       domElem.removeEventListener('wheel', onWheel);
       domElem.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [threeLoaded, isDarkMode, officeName]);
+  }, [threeLoaded, isDarkMode, officeName, user]);
 
   // --- Handlers ---
   const handleThrowPaperBall = (targetTeammate) => {
@@ -2124,6 +2253,10 @@ export default function App() {
             <div className="flex items-center gap-1.5 font-medium">
               <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white font-bold">L-Click Đồng Nghiệp</span> Ném Giấy / Gạt Chân Té
             </div>
+            <div className="h-4 w-[1px] bg-slate-700" />
+            <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
+              🟢 Live: {onlinePlayers.length + 1} người chơi online
+            </div>
           </div>
 
           {/* Target Interaction Prank HUD */}
@@ -2363,7 +2496,7 @@ export default function App() {
                 activeRightTab === 'members' ? 'border-blue-500 text-blue-400 bg-slate-800/40' : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Users className="w-4 h-4" /> Thành viên (15)
+              <Users className="w-4 h-4" /> Online ({onlinePlayers.length + 1})
             </button>
           </div>
 
@@ -2400,41 +2533,48 @@ export default function App() {
 
           {activeRightTab === 'members' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {teammates.map((tm) => (
-                <div
-                  key={tm.id}
-                  onClick={() => {
-                    if (!tm.isUser) {
-                      setActiveTargetTeammate(tm);
-                      sfx.play('click');
-                    } else {
-                      sfx.play('camera');
-                      setSelectedDeskId(tm.id);
-                    }
-                  }}
-                  className={`p-2.5 rounded-xl border transition flex items-center justify-between cursor-pointer hover:border-blue-500 ${
-                    selectedDeskId === tm.id ? 'bg-blue-600/15 border-blue-500' : 'bg-slate-800/40 border-slate-800/80 hover:bg-slate-800'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-md" style={{ backgroundColor: tm.color }}>
-                      {tm.emotion || '💻'}
-                    </div>
-                    <div>
-                      <div className="font-semibold text-xs flex items-center gap-1.5">
-                        {tm.name}
-                        {tm.isUser && <span className="text-[9px] bg-blue-500/20 text-blue-300 px-1 rounded">Bạn</span>}
+              <div className="text-[11px] font-bold text-slate-400 uppercase px-2 mb-1">
+                Bạn (Local User)
+              </div>
+              <div className="p-2.5 rounded-xl border border-blue-500/50 bg-blue-600/10 flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-md" style={{ backgroundColor: currentUser.color }}>
+                    ✨
+                  </div>
+                  <div>
+                    <div className="font-semibold text-xs text-white">{currentUser.name}</div>
+                    <div className="text-[10px] text-blue-400 font-medium">Đang trong phòng 3D</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[11px] font-bold text-slate-400 uppercase px-2 mb-1">
+                Bạn bè đang Online 3D ({onlinePlayers.length})
+              </div>
+              {onlinePlayers.length === 0 ? (
+                <div className="text-xs text-slate-500 text-center py-6">
+                  Chưa có bạn bè nào mở link Vercel này. Hãy gửi link để cùng vào trải nghiệm!
+                </div>
+              ) : (
+                onlinePlayers.map((p) => (
+                  <div
+                    key={p.uid}
+                    className="p-2.5 rounded-xl border border-slate-800 bg-slate-800/40 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs shadow-md" style={{ backgroundColor: p.color || '#3b82f6' }}>
+                        🌐
                       </div>
-                      <div className="text-[10px] text-slate-400">{tm.status}</div>
+                      <div>
+                        <div className="font-semibold text-xs text-white flex items-center gap-1.5">
+                          {p.name || 'Friend'}
+                        </div>
+                        <div className="text-[10px] text-emerald-400 font-medium">Đang di chuyển 3D</div>
+                      </div>
                     </div>
                   </div>
-                  {!tm.isUser && (
-                    <span className="text-[10px] text-amber-400 font-bold px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30">
-                      Tương Tác
-                    </span>
-                  )}
-                </div>
-              ))}
+                ))
+              )}
             </div>
           )}
         </div>
