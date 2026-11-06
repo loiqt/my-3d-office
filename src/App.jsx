@@ -242,10 +242,18 @@ function getDefaultDesk3DPosition(id) {
   }
 }
 
+// Cố định vị trí tán lá cây (Loại bỏ ngẫu nhiên Math.random)
+const LEAF_OFFSETS = [
+  { x: 0.05, z: 0.04 },
+  { x: -0.06, z: 0.05 },
+  { x: 0.04, z: -0.06 },
+  { x: -0.05, z: -0.03 },
+  { x: 0.0, z: 0.0 }
+];
+
 export default function App() {
   const [user, setUser] = useState(null);
   const [hasOnboarded, setHasOnboarded] = useState(false);
-
   const [officeName, setOfficeName] = useState('VĂN PHÒNG SÁNG TẠO SÀI GÒN');
 
   const [characterConfig, setCharacterConfig] = useState({
@@ -272,15 +280,12 @@ export default function App() {
 
   const [isSitting, setIsSitting] = useState(false);
   const [seatedChairInfo, setSeatedChairInfo] = useState(null);
-
   const [isLayoutMode, setIsLayoutMode] = useState(false);
   const [selectedDeskToMove, setSelectedDeskToMove] = useState(null);
-
   const [activeTargetTeammate, setActiveTargetTeammate] = useState(null);
 
   const [dizzyStates, setDizzyStates] = useState({});
   const [trippedStates, setTrippedStates] = useState({});
-
   const [speechBubbles, setSpeechBubbles] = useState([]);
 
   const [activeCategory, setActiveCategory] = useState('tech');
@@ -290,6 +295,39 @@ export default function App() {
 
   const playerPosRef = useRef({ x: -3.5 * 2.55, z: 3.2, targetX: -3.5 * 2.55, targetZ: 3.2 });
   const flyingProjectilesRef = useRef([]);
+
+  // Dynamic References to avoid re-mounting Three.js canvas on state change
+  const deskConfigsRef = useRef(deskConfigs);
+  deskConfigsRef.current = deskConfigs;
+
+  const deskLayoutPositionsRef = useRef(deskLayoutPositions);
+  deskLayoutPositionsRef.current = deskLayoutPositions;
+
+  const dizzyStatesRef = useRef(dizzyStates);
+  dizzyStatesRef.current = dizzyStates;
+
+  const trippedStatesRef = useRef(trippedStates);
+  trippedStatesRef.current = trippedStates;
+
+  const speechBubblesRef = useRef(speechBubbles);
+  speechBubblesRef.current = speechBubbles;
+
+  const selectedDeskIdRef = useRef(selectedDeskId);
+  selectedDeskIdRef.current = selectedDeskId;
+
+  const isLayoutModeRef = useRef(isLayoutMode);
+  isLayoutModeRef.current = isLayoutMode;
+
+  const isSittingRef = useRef(isSitting);
+  isSittingRef.current = isSitting;
+
+  const seatedChairInfoRef = useRef(seatedChairInfo);
+  seatedChairInfoRef.current = seatedChairInfo;
+
+  const teammatesRef = useRef(teammates);
+  teammatesRef.current = teammates;
+
+  const desk3DMeshMapRef = useRef({});
 
   const [chatMessages, setChatMessages] = useState([
     { id: 'm1', senderId: 2, senderName: 'Sarah Chen', text: 'Chào mừng các bạn đến với Văn phòng 3D Châu Âu siêu mượt! 🎉', time: '10:00 AM' },
@@ -304,7 +342,6 @@ export default function App() {
   const canvasContainerRef = useRef(null);
   const threeSceneRef = useRef(null);
   const screenPositionsRef = useRef({});
-
   const keysPressedRef = useRef({});
 
   const currentUser = useMemo(() => teammates.find(t => t.isUser) || teammates[0], [teammates]);
@@ -399,7 +436,7 @@ export default function App() {
     };
   }, [isSitting]);
 
-  // --- 3D Scene Initialization (OPTIMIZED FOR 60+ FPS BY DISABLING SHADOW PASSES) ---
+  // --- 3D Scene Initialization (OPTIMIZED FOR HIGH FPS & ZERO RE-CREATION LAG) ---
   useEffect(() => {
     if (!threeLoaded || !canvasContainerRef.current) return;
 
@@ -416,7 +453,6 @@ export default function App() {
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    // TẮT HOÀN TOÀN SHADOW MAP ĐỂ GIẢM TẢI GPU VA TĂNG FPS TOÀN BỘ CÁC TÍNH NĂNG
     renderer.shadowMap.enabled = false;
 
     while (container.firstChild) {
@@ -611,7 +647,7 @@ export default function App() {
 
     scene.add(sofaGroup);
 
-    // Potted Trees
+    // Potted Trees (STATIC - NO RANDOM JITTER)
     const createPottedTree = (px, pz, scale = 1.0) => {
       const treeGroup = new THREE.Group();
       treeGroup.position.set(px, 0, pz);
@@ -627,7 +663,8 @@ export default function App() {
       const leafMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.5 });
       for (let i = 0; i < 5; i++) {
         const foliage = new THREE.Mesh(new THREE.SphereGeometry((0.7 - i * 0.08) * scale, 12, 12), leafMat);
-        foliage.position.set((Math.random() - 0.5) * 0.3 * scale, (2.2 + i * 0.4) * scale, (Math.random() - 0.5) * 0.3 * scale);
+        const off = LEAF_OFFSETS[i];
+        foliage.position.set(off.x * scale, (2.2 + i * 0.4) * scale, off.z * scale);
         treeGroup.add(foliage);
       }
       return treeGroup;
@@ -673,7 +710,6 @@ export default function App() {
     const zzzSpriteMapRef = {};
 
     let playerAvatarMeshRef = null;
-    let playerAvatarLegsRef = [];
     let playerAvatarArmsRef = [];
     let playerThighsRef = [];
     let playerShinsRef = [];
@@ -1063,12 +1099,14 @@ export default function App() {
     }
 
     // Populate 15 Desks
-    teammates.forEach((tm) => {
-      const pos = deskLayoutPositions[tm.id] || getDefaultDesk3DPosition(tm.id);
+    teammatesRef.current.forEach((tm) => {
+      const pos = deskLayoutPositionsRef.current[tm.id] || getDefaultDesk3DPosition(tm.id);
       const deskGroup = new THREE.Group();
       deskGroup.position.set(pos.x, 0, pos.z);
       deskGroup.rotation.y = pos.rotY;
       deskGroup.userData = { deskId: tm.id, teammate: tm, isDeskUnit: true };
+
+      desk3DMeshMapRef.current[tm.id] = deskGroup;
 
       const tableGeo = new THREE.BoxGeometry(2.4, 0.08, 1.3);
       const tableMat = new THREE.MeshStandardMaterial({
@@ -1143,7 +1181,7 @@ export default function App() {
       bubbleSprite.position.set(0, 2.35, 0);
       deskGroup.add(bubbleSprite);
 
-      const items = deskConfigs[tm.id] || [];
+      const items = deskConfigsRef.current[tm.id] || [];
       const itemsContainer = new THREE.Group();
       itemsContainer.name = 'deskItemsContainer';
       items.forEach((item) => {
@@ -1157,7 +1195,7 @@ export default function App() {
 
     const playerAvatarGroup = new THREE.Group();
     playerAvatarGroup.position.set(playerPosRef.current.x, 0, playerPosRef.current.z);
-    const playerAvatarMesh = createDetailedHumanAvatarMesh(currentUser, true, isSitting);
+    const playerAvatarMesh = createDetailedHumanAvatarMesh(currentUser, true, isSittingRef.current);
     playerAvatarGroup.add(playerAvatarMesh);
     scene.add(playerAvatarGroup);
     playerAvatarMeshRef = playerAvatarGroup;
@@ -1171,6 +1209,7 @@ export default function App() {
     let isRightMouseDown = false;
     let isDraggingItemOnDesk = false;
     let activeDraggedItemId = null;
+    let activeDraggedItemMesh = null;
 
     let isDraggingEntireDesk = false;
     let activeDraggedDeskId = null;
@@ -1211,7 +1250,7 @@ export default function App() {
             while (obj && obj.parent !== scene) {
               if (obj.userData?.isAvatarObject) {
                 const targetId = obj.userData.teammateId;
-                const foundTm = teammates.find((t) => t.id === targetId);
+                const foundTm = teammatesRef.current.find((t) => t.id === targetId);
                 if (foundTm && !foundTm.isUser) {
                   setActiveTargetTeammate(foundTm);
                   sfx.play('click');
@@ -1228,7 +1267,7 @@ export default function App() {
             }
           }
 
-          if (isLayoutMode && clickedDeskId) {
+          if (isLayoutModeRef.current && clickedDeskId) {
             isDraggingEntireDesk = true;
             activeDraggedDeskId = clickedDeskId;
             setSelectedDeskToMove(clickedDeskId);
@@ -1236,15 +1275,16 @@ export default function App() {
             return;
           }
 
-          if (clickedDeskId && selectedDeskId === clickedDeskId && clickedItemObject) {
+          if (clickedDeskId && selectedDeskIdRef.current === clickedDeskId && clickedItemObject) {
             isDraggingItemOnDesk = true;
             activeDraggedItemId = clickedItemObject.userData.itemId;
+            activeDraggedItemMesh = clickedItemObject;
             setSelectedItemIdOnDesk(clickedItemObject.userData.itemId);
             sfx.play('drag');
             return;
           }
 
-          if (clickedChairObj && !isLayoutMode) {
+          if (clickedChairObj && !isLayoutModeRef.current) {
             const deskId = clickedChairObj.userData?.deskId;
             let targetSeatWorldPos;
             let chairRot = 0;
@@ -1253,7 +1293,7 @@ export default function App() {
               targetSeatWorldPos = clickedChairObj.userData.seatWorldPos;
               chairRot = 0;
             } else if (deskId) {
-              const dPos = deskLayoutPositions[deskId] || getDefaultDesk3DPosition(deskId);
+              const dPos = deskLayoutPositionsRef.current[deskId] || getDefaultDesk3DPosition(deskId);
               targetSeatWorldPos = { x: dPos.x, y: 0.45, z: dPos.z + (dPos.rotY === 0 ? 0.8 : -0.8) };
               chairRot = dPos.rotY;
             }
@@ -1267,14 +1307,14 @@ export default function App() {
             }
           }
 
-          if (clickedDeskId && selectedDeskId === null && !isLayoutMode) {
+          if (clickedDeskId && selectedDeskIdRef.current === null && !isLayoutModeRef.current) {
             setSelectedDeskId(clickedDeskId);
             sfx.play('camera');
             return;
           }
 
-          if (clickedFloorPoint && selectedDeskId === null && !isLayoutMode) {
-            if (isSitting) {
+          if (clickedFloorPoint && selectedDeskIdRef.current === null && !isLayoutModeRef.current) {
+            if (isSittingRef.current) {
               setIsSitting(false);
               setSeatedChairInfo(null);
               sfx.play('stand');
@@ -1285,7 +1325,7 @@ export default function App() {
           }
         }
 
-        if (selectedDeskId === null) {
+        if (selectedDeskIdRef.current === null) {
           isLeftMouseDown = true;
           previousMousePosition = { x: e.clientX, y: e.clientY };
         }
@@ -1296,13 +1336,19 @@ export default function App() {
     };
 
     const onPointerMove = (e) => {
-      if (isDraggingEntireDesk && activeDraggedDeskId && isLayoutMode) {
+      if (isDraggingEntireDesk && activeDraggedDeskId && isLayoutModeRef.current) {
         const intersects = getRaycastIntersects(e);
         for (let i = 0; i < intersects.length; i++) {
           if (intersects[i].object.userData?.isFloorPlane) {
             const pt = intersects[i].point;
             const newX = Math.max(-19, Math.min(19, pt.x));
             const newZ = Math.max(-12, Math.min(12, pt.z));
+
+            const deskMesh = desk3DMeshMapRef.current[activeDraggedDeskId];
+            if (deskMesh) {
+              deskMesh.position.x = newX;
+              deskMesh.position.z = newZ;
+            }
 
             setDeskLayoutPositions((prev) => ({
               ...prev,
@@ -1314,9 +1360,9 @@ export default function App() {
         return;
       }
 
-      if (isDraggingItemOnDesk && activeDraggedItemId && selectedDeskId !== null) {
+      if (isDraggingItemOnDesk && activeDraggedItemId && selectedDeskIdRef.current !== null) {
         const intersects = getRaycastIntersects(e);
-        const deskPos = deskLayoutPositions[selectedDeskId] || getDefaultDesk3DPosition(selectedDeskId);
+        const deskPos = deskLayoutPositionsRef.current[selectedDeskIdRef.current] || getDefaultDesk3DPosition(selectedDeskIdRef.current);
 
         for (let i = 0; i < intersects.length; i++) {
           const pt = intersects[i].point;
@@ -1324,12 +1370,17 @@ export default function App() {
             let localX = Math.max(-1.0, Math.min(1.0, pt.x - deskPos.x));
             let localZ = Math.max(-0.55, Math.min(0.55, pt.z - deskPos.z));
 
+            if (activeDraggedItemMesh) {
+              activeDraggedItemMesh.position.x = localX;
+              activeDraggedItemMesh.position.z = localZ;
+            }
+
             setDeskConfigs((prev) => {
-              const currentList = prev[selectedDeskId] || [];
+              const currentList = prev[selectedDeskIdRef.current] || [];
               const updated = currentList.map((item) =>
                 item.id === activeDraggedItemId ? { ...item, x: localX, z: localZ } : item
               );
-              return { ...prev, [selectedDeskId]: updated };
+              return { ...prev, [selectedDeskIdRef.current]: updated };
             });
             break;
           }
@@ -1340,7 +1391,7 @@ export default function App() {
       const deltaX = e.clientX - previousMousePosition.x;
       const deltaY = e.clientY - previousMousePosition.y;
 
-      if (isLeftMouseDown && selectedDeskId === null) {
+      if (isLeftMouseDown && selectedDeskIdRef.current === null) {
         cameraAngleX -= deltaX * 0.006;
         cameraAngleY = Math.max(0.15, Math.min(1.25, cameraAngleY + deltaY * 0.006));
       } else if (isRightMouseDown) {
@@ -1356,10 +1407,11 @@ export default function App() {
     const onPointerUp = () => {
       if (isDraggingItemOnDesk) {
         sfx.play('place');
-        if (db && selectedDeskId) {
+        const deskId = selectedDeskIdRef.current;
+        if (db && deskId) {
           try {
-            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'desks', String(selectedDeskId));
-            setDoc(docRef, { items: deskConfigs[selectedDeskId] || [] }, { merge: true });
+            const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'desks', String(deskId));
+            setDoc(docRef, { items: deskConfigsRef.current[deskId] || [] }, { merge: true });
           } catch (e) {}
         }
       }
@@ -1369,6 +1421,7 @@ export default function App() {
       isDraggingItemOnDesk = false;
       isDraggingEntireDesk = false;
       activeDraggedItemId = null;
+      activeDraggedItemMesh = null;
       activeDraggedDeskId = null;
       isLeftMouseDown = false;
       isRightMouseDown = false;
@@ -1396,12 +1449,12 @@ export default function App() {
       prankClock += 0.05;
       const nowTime = Date.now();
 
-      teammates.forEach((tm) => {
+      teammatesRef.current.forEach((tm) => {
         const avatarGrp = avatarGroupMapRef[tm.id];
         const duckRing = dizzyDucksGroupMapRef[tm.id];
         const zzzSpr = zzzSpriteMapRef[tm.id];
 
-        const dizzyUntil = dizzyStates[tm.id] || 0;
+        const dizzyUntil = dizzyStatesRef.current[tm.id] || 0;
         if (nowTime < dizzyUntil) {
           if (duckRing) {
             duckRing.visible = true;
@@ -1412,12 +1465,12 @@ export default function App() {
           }
         } else {
           if (duckRing) duckRing.visible = false;
-          if (avatarGrp && (!trippedStates[tm.id] || nowTime >= trippedStates[tm.id])) {
+          if (avatarGrp && (!trippedStatesRef.current[tm.id] || nowTime >= trippedStatesRef.current[tm.id])) {
             avatarGrp.rotation.z = 0;
           }
         }
 
-        const tripUntil = trippedStates[tm.id] || 0;
+        const tripUntil = trippedStatesRef.current[tm.id] || 0;
         if (nowTime < tripUntil) {
           if (avatarGrp) {
             avatarGrp.rotation.x = -Math.PI / 2 + 0.1;
@@ -1429,7 +1482,7 @@ export default function App() {
           }
         } else {
           if (zzzSpr) zzzSpr.visible = false;
-          if (avatarGrp && (!tm.isUser || !isSitting)) {
+          if (avatarGrp && (!tm.isUser || !isSittingRef.current)) {
             if (avatarGrp.rotation.x !== 0 && !tm.isUser) {
               avatarGrp.rotation.x = 0;
               avatarGrp.position.y = 0;
@@ -1507,29 +1560,30 @@ export default function App() {
         curr.x = curr.targetX;
         curr.z = curr.targetZ;
 
-        if (seatedChairInfo && !isSitting) {
+        if (seatedChairInfoRef.current && !isSittingRef.current) {
           setIsSitting(true);
           sfx.play('sit');
         }
 
-        playerThighsRef.forEach((thigh) => { if (thigh) thigh.rotation.x = isSitting ? -Math.PI / 2 : 0; });
-        playerShinsRef.forEach((shin) => { if (shin) shin.rotation.x = isSitting ? Math.PI / 2 : 0; });
+        playerThighsRef.forEach((thigh) => { if (thigh) thigh.rotation.x = isSittingRef.current ? -Math.PI / 2 : 0; });
+        playerShinsRef.forEach((shin) => { if (shin) shin.rotation.x = isSittingRef.current ? Math.PI / 2 : 0; });
         playerAvatarArmsRef.forEach((arm) => { if (arm) arm.rotation.x = 0; });
       }
 
       if (playerAvatarMeshRef) {
         playerAvatarMeshRef.position.x = curr.x;
         playerAvatarMeshRef.position.z = curr.z;
-        if (isSitting) {
+        if (isSittingRef.current) {
           playerAvatarMeshRef.position.y = 0.15;
-          if (seatedChairInfo) playerAvatarMeshRef.rotation.y = seatedChairInfo.rot;
+          if (seatedChairInfoRef.current) playerAvatarMeshRef.rotation.y = seatedChairInfoRef.current.rot;
         } else {
           playerAvatarMeshRef.position.y = 0;
         }
       }
 
-      if (selectedDeskId !== null) {
-        const deskPos = deskLayoutPositions[selectedDeskId] || getDefaultDesk3DPosition(selectedDeskId);
+      const activeDeskId = selectedDeskIdRef.current;
+      if (activeDeskId !== null) {
+        const deskPos = deskLayoutPositionsRef.current[activeDeskId] || getDefaultDesk3DPosition(activeDeskId);
         const camTargetPos = new THREE.Vector3(deskPos.x, 1.2, deskPos.z);
         camera.position.set(deskPos.x, 3.2, deskPos.z + 3.4);
         camera.lookAt(camTargetPos);
@@ -1543,12 +1597,12 @@ export default function App() {
 
       // Project 3D Speech Bubbles Coordinates to 2D Screen Space
       const newScreenPos = {};
-      speechBubbles.forEach((bubble) => {
+      speechBubblesRef.current.forEach((bubble) => {
         let worldPos = new THREE.Vector3();
         if (bubble.deskId === currentUser.id && playerAvatarMeshRef) {
           worldPos.set(playerPosRef.current.x, 1.9, playerPosRef.current.z);
         } else {
-          const dPos = deskLayoutPositions[bubble.deskId] || getDefaultDesk3DPosition(bubble.deskId);
+          const dPos = deskLayoutPositionsRef.current[bubble.deskId] || getDefaultDesk3DPosition(bubble.deskId);
           worldPos.set(dPos.x, 2.2, dPos.z);
         }
         worldPos.project(camera);
@@ -1584,7 +1638,7 @@ export default function App() {
       domElem.removeEventListener('contextmenu', onContextMenu);
       window.removeEventListener('resize', handleResize);
     };
-  }, [threeLoaded, selectedDeskId, isDarkMode, deskLayoutPositions, isLayoutMode, isSitting, seatedChairInfo, officeName, speechBubbles, teammates, currentUser, dizzyStates, trippedStates]);
+  }, [threeLoaded, isDarkMode, officeName]);
 
   // --- Handlers ---
   const handleThrowPaperBall = (targetTeammate) => {
