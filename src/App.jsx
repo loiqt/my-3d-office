@@ -116,7 +116,6 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         const p = docSnap.data();
         if (p.uid === user.uid) {
-          // Kiểm tra xem có nhận được hiệu ứng từ người khác gửi đến không
           if (p.actionEffect && p.actionTime && (now - (p.actionTime?.seconds || 0) < 6)) {
             triggerLocalEffect(p.actionEffect, p.actorName || 'Ai đó');
           }
@@ -506,7 +505,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans m-0 p-0">
       
       {uiToast && (
         <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 animate-bounce">
@@ -524,7 +523,7 @@ export default function App() {
       <div className="flex-1 flex flex-col h-full w-full relative overflow-hidden">
         
         {/* Header */}
-        <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0">
+        <header className="h-16 border-b border-slate-800 px-6 flex items-center justify-between z-10 bg-slate-900/90 shrink-0 w-full">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-pink-600 rounded-xl text-white shadow-md"><Sparkles className="w-5 h-5" /></div>
             <div>
