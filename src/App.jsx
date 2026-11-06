@@ -22,7 +22,7 @@ import {
   Move, Package, Sparkles
 } from 'lucide-react';
 
-// --- Firebase Initialization ---
+// --- Firebase Config ---
 const firebaseConfig = {
   apiKey: "AIzaSyBzBLcsQIg8reDq6tpvs9FnLgSaxicOfY0",
   authDomain: "my-3d-office-game.firebaseapp.com",
@@ -38,7 +38,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- Web Audio Synthesizer ---
+// --- Sound Synthesizer ---
 class WorkplaceSoundSystem {
   constructor() { this.ctx = null; }
   init() {
@@ -99,12 +99,12 @@ class WorkplaceSoundSystem {
 }
 const sfx = new WorkplaceSoundSystem();
 
-// --- Item Decor Inventory ---
+// --- Item Catalog ---
 const DECOR_INVENTORY = {
   tech: [
     { type: 'laptop', name: 'Laptop Gaming', icon: '💻', color: '#1e293b' },
     { type: 'dual_monitors', name: 'Màn hình Kép', icon: '🖥️', color: '#0f172a' },
-    { type: 'keyboard', name: 'Bàn phím cơ RGB', icon: '⌨️', color: '#3b82f6' }
+    { type: 'keyboard', name: 'Bàn phím cơ', icon: '⌨️', color: '#3b82f6' }
   ],
   plants: [
     { type: 'succulent', name: 'Chậu Sen Đá', icon: '🪴', color: '#10b981' },
@@ -188,7 +188,6 @@ export default function App() {
 
   const canvasContainerRef = useRef(null);
   const playerPosRef = useRef({ x: -3.5 * 2.55, z: 3.2, targetX: -3.5 * 2.55, targetZ: 3.2 });
-  const keysPressedRef = useRef({});
   const desk3DMeshMapRef = useRef({});
 
   const deskLayoutPositionsRef = useRef(deskLayoutPositions);
@@ -200,10 +199,7 @@ export default function App() {
   const isLayoutModeRef = useRef(isLayoutMode);
   isLayoutModeRef.current = isLayoutMode;
 
-  const selectedDeskIdRef = useRef(selectedDeskId);
-  selectedDeskIdRef.current = selectedDeskId;
-
-  // 1. Khôi phục Onboarding
+  // Khôi phục Onboarding
   useEffect(() => {
     const saved = localStorage.getItem('user_3d_avatar');
     if (saved) {
@@ -214,7 +210,7 @@ export default function App() {
     }
   }, []);
 
-  // 2. Load Three.js
+  // Tải thư viện Three.js
   useEffect(() => {
     if (window.THREE) { setThreeLoaded(true); return; }
     const script = document.createElement('script');
@@ -224,7 +220,7 @@ export default function App() {
     document.head.appendChild(script);
   }, []);
 
-  // 3. Auth
+  // Kết nối Firebase Auth
   useEffect(() => {
     if (!auth) return;
     const initAuth = async () => {
@@ -240,11 +236,10 @@ export default function App() {
     return onAuthStateChanged(auth, (u) => setUser(u));
   }, []);
 
-  // 4. Firebase Sync (Gồm cả vị trí Bàn và Vật phẩm)
+  // Đồng bộ Firebase Realtime
   useEffect(() => {
     if (!db || !user) return;
 
-    // Synchronize Desks Items & Real-time 3D Positions
     const desksCol = collection(db, 'artifacts', appId, 'public', 'data', 'desks');
     const unsubDesks = onSnapshot(desksCol, (snapshot) => {
       const loadedDesks = { ...DEFAULT_DESK_ITEMS };
@@ -259,7 +254,6 @@ export default function App() {
 
       setDeskConfigs(loadedDesks);
 
-      // Cập nhật vị trí Bàn 3D trên màn hình của tất cả người chơi
       if (Object.keys(loadedPositions).length > 0) {
         setDeskLayoutPositions((prev) => {
           const nextPos = { ...prev, ...loadedPositions };
@@ -276,7 +270,6 @@ export default function App() {
       }
     });
 
-    // Synchronize Online Players
     const playersCol = collection(db, 'artifacts', appId, 'public', 'data', 'players');
     const unsubPlayers = onSnapshot(playersCol, (snapshot) => {
       const now = Date.now() / 1000;
@@ -296,7 +289,7 @@ export default function App() {
     };
   }, [user]);
 
-  // Gán bàn người chơi thực & Đánh dấu xóa NPC đè
+  // Gán bàn thực tế
   const teammates = useMemo(() => {
     const list = [...INITIAL_TEAMMATES];
     list[0] = {
@@ -327,7 +320,7 @@ export default function App() {
   const onlinePlayersRef = useRef(onlinePlayers);
   onlinePlayersRef.current = onlinePlayers;
 
-  // 3D Scene Engine
+  // 3D Canvas Engine
   useEffect(() => {
     if (!threeLoaded || !canvasContainerRef.current) return;
     const THREE = window.THREE;
@@ -352,7 +345,6 @@ export default function App() {
     sunLight.position.set(-20, 30, 22);
     scene.add(sunLight);
 
-    // Sàn Parquet
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(44, 30),
       new THREE.MeshStandardMaterial({ color: 0x241d17, roughness: 0.4 })
@@ -361,13 +353,11 @@ export default function App() {
     floor.userData = { isFloorPlane: true };
     scene.add(floor);
 
-    // Tường xung quanh
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6 });
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(44, 11, 0.4), wallMat);
     backWall.position.set(0, 5.5, -14);
     scene.add(backWall);
 
-    // Cây cảnh 3D trang trí góc phòng
     const createPlantMesh = (x, z) => {
       const pGroup = new THREE.Group();
       pGroup.position.set(x, 0, z);
@@ -413,7 +403,6 @@ export default function App() {
       return group;
     }
 
-    // Dựng 15 Bàn
     teammatesRef.current.forEach((tm) => {
       const pos = deskLayoutPositionsRef.current[tm.id] || getDefaultDesk3DPosition(tm.id);
       const deskGroup = new THREE.Group();
@@ -434,7 +423,6 @@ export default function App() {
       chair.userData = { isChair: true, deskId: tm.id };
       deskGroup.add(chair);
 
-      // KHẮC PHỤC LỖI ĐÈ NPC: Không render NPC nếu bàn có người thật
       if (!tm.isUser && !tm.isRealPlayer) {
         const npcMesh = createHumanMesh(tm, false);
         deskGroup.add(npcMesh);
@@ -443,7 +431,6 @@ export default function App() {
       desksGroup.add(deskGroup);
     });
 
-    // Player Mesh
     const playerGroup = new THREE.Group();
     playerGroup.position.set(playerPosRef.current.x, 0, playerPosRef.current.z);
     const playerMesh = createHumanMesh(teammatesRef.current[0], true);
@@ -513,7 +500,6 @@ export default function App() {
     };
 
     const onPointerMove = (e) => {
-      // Kéo di chuyển toàn bộ Bàn trong Chế độ Sắp Xếp
       if (isDraggingEntireDesk && activeDraggedDeskId && isLayoutModeRef.current) {
         const intersects = getRaycastIntersects(e);
         for (let i = 0; i < intersects.length; i++) {
@@ -546,7 +532,6 @@ export default function App() {
     };
 
     const onPointerUp = () => {
-      // LƯU VỊ TRÍ BÀN LÊN FIREBASE KHI DỪNG KÉO
       if (isDraggingEntireDesk && activeDraggedDeskId) {
         sfx.play('place');
         const pos = deskLayoutPositionsRef.current[activeDraggedDeskId];
@@ -556,12 +541,9 @@ export default function App() {
             setDoc(deskDoc, {
               position: { x: pos.x, z: pos.z, rotY: pos.rotY || 0 }
             }, { merge: true });
-          } catch (err) {
-            console.warn("Lỗi lưu vị trí bàn:", err);
-          }
+          } catch (err) {}
         }
       }
-
       isDraggingEntireDesk = false;
       activeDraggedDeskId = null;
       isMouseDown = false;
@@ -573,13 +555,14 @@ export default function App() {
 
     let animId;
     const animate = () => {
-      animId = requestAnimationFrame(animId);
+      // ĐÃ SỬA LỖI: Gọi tên hàm animate thay vì biến animId
+      animId = requestAnimationFrame(animate);
+
       const curr = playerPosRef.current;
       curr.x += (curr.targetX - curr.x) * 0.12;
       curr.z += (curr.targetZ - curr.z) * 0.12;
       playerGroup.position.set(curr.x, 0, curr.z);
 
-      // Đẩy vị trí người chơi hiện tại lên Firebase
       if (user && db && (Math.abs(curr.targetX - curr.x) > 0.05 || Math.abs(curr.targetZ - curr.z) > 0.05)) {
         try {
           const pDoc = doc(db, 'artifacts', appId, 'public', 'data', 'players', user.uid);
@@ -594,7 +577,6 @@ export default function App() {
         } catch (e) {}
       }
 
-      // Render người chơi online
       const remoteMeshMap = {};
       onlinePlayersRef.current.forEach((rp) => {
         let rMesh = remoteMeshMap[rp.uid];
