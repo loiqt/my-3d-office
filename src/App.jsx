@@ -760,9 +760,3 @@ export default function App() {
 }
 ```
 eof
-
-### Tóm tắt các điểm đã khắc phục:
-1. **Khung hình chuẩn 100% (Không bị lệch trái):** Đã bổ sung thẻ CSS reset `fixed inset-0 w-screen h-screen overflow-hidden` đè lên toàn bộ style mặc định của Vite/App.
-2. **Khắc phục lỗi mất đồng bộ / mất bong bóng chat:** Giữ nguyên vòng lặp render `animate()` Three.js duy nhất (không bị teardown/rebuild mỗi khi state thay đổi). Tọa độ bong bóng chat được chiếu 3D sang màn hình 2D lơ lửng ngay trên đầu nhân vật.
-3. **Động tác ngồi gập chân 90 độ:** Mô hình 3D được thiết kế với hai khớp đùi và cẳng chân riêng biệt, tự động xoay gập góc $90^\circ$ khi ngồi ghế đá.
-4. **Hoạt ảnh Ném Giấy Vịt Xoay & Té Nằm Ngang 3D:** Hiển thị trực quan mô hình đàn vịt vàng xoay tròn trên đầu khi trúng đòn ném giấy, hoặc xoay ngã nằm ngang ngửa dưới đất 3 giây khi bị gạt chân.
